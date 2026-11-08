@@ -45,6 +45,12 @@ Operates seamlessly via dual interfaces:
 - **R4: Schedule Management & Leisure Research**: Google Calendar v3 interval conflict detection ($\max(s_1,s_2) < \min(e_1,e_2)$), to-do list tracking, and curated outing recommendations.
 - **R5: Dual User Interface & Free-Tier Cloud Packaging**: Responsive mobile-first dashboard (Chart.js), multi-stage minimal Dockerfile (<140MB), scale-to-zero Cloud Run deployment automation.
 
+### ✨ Version 2.0 Colombian Banking & Debt Ledger Extensions
+- **Multi-Account Asset Allocation**: Partition balances across physical cash (`Efectivo` 💵) and digital fintech accounts (`Nequi` 📱, `Nu` 🟣, `Daviplata` 🔴, `Bancolombia` 🟡) with zero net-worth-loss transfers ($\Delta \text{Net Worth} = 0$).
+- **Bilateral Debt & Receivables Ledger**: Track money owed to others vs. loans granted to others with counterparty, amount in COP, reasons, and due dates. Supports partial payments and full settlement.
+- **Recurring Subscriptions & Calendar**: Track recurring services (*Netflix, Spotify, gym, tuition*) with renewal day clamping and unified upcoming payment schedules.
+- **Colombian Spanish Conversational NLP**: Full understanding of regional banking phrasing (*"le presté 50k a Juan desde Nequi"*, *"pasé 100 mil de Bancolombia a Nu"*, *"¿cuánta plata tengo en efectivo y en Nu?"*, *"¿cuándo vence Spotify?"*).
+
 ---
 
 ## ⚡ Zero-Cost Cloud Free-Tier Deployment (Google Cloud Run)
@@ -175,6 +181,13 @@ The web dashboard is an ultra-lightweight Single Page Application (SPA) requirin
 | `DELETE` | `/api/tasks/{id}` | Delete a task |
 | `GET` | `/api/email/digest` | Returns executive digest of urgent emails |
 | `GET` | `/api/research/outings` | Returns curated dining and leisure recommendations |
+| `GET` | `/api/finance/accounts` | Query account balances (Efectivo, Nequi, Nu, etc.) & net worth |
+| `POST` | `/api/finance/transfers` | Transfer funds between accounts with zero net-worth loss |
+| `GET` | `/api/finance/debts` | Query debts owed and receivables granted |
+| `POST` | `/api/finance/debts` | Record a new debt or loan with due date & linked account |
+| `POST` | `/api/finance/debts/{id}/settle` | Partially or fully settle a debt/loan |
+| `GET` | `/api/finance/subscriptions` | List recurring subscriptions with monthly billing cycle |
+| `GET` | `/api/finance/calendar/payments` | Unified schedule of upcoming debts, loans, & subscriptions |
 
 ---
 
