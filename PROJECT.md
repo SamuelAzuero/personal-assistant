@@ -111,7 +111,7 @@ The system follows a modular Clean Architecture / Ports-and-Adapters pattern in 
 | M6 | Debt & Multi-Account Banking Domain Core | DB schema extensions (accounts, transfers, debts, subscriptions), repositories, domain services, COP balance debit/credit, zero-loss transfers | none | DONE |
 | M7 | Conversational NLP & Dual UI Dashboard Extensions | Colombian Spanish NLP intent extractors & tool router, REST endpoints (/api/accounts, /api/debts, etc.), Web UI cards & modals | M6 | DONE |
 | M8 | Secrets Sanitization & Secure Git Setup | Comprehensive .gitignore, clean .env.example, git init, commit under est.samuel.azuero@unimilitar.edu.co, remote push | none | DONE |
-| M9 | Final Expansion E2E Verification & Hardening | 100% pass rate across baseline + new unit & E2E tests, automated git secrets scan test | M6, M7, M8, E2E-TEST-2 | IN_PROGRESS |
+| M9 | Final Expansion E2E Verification & Hardening | 100% pass rate across baseline + new unit & E2E tests, automated git secrets scan test | M6, M7, M8, E2E-TEST-2 | DONE |
 | E2E-TEST-2 | Opaque-Box E2E Testing Suite Track (Expansion) | Comprehensive test suite for F60-F81 across Tiers 1-4 and secret scan -> TEST_EXPANSION_READY.md | none | DONE |
 
 ## Interface Contracts
