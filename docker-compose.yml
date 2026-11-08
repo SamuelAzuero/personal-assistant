@@ -1,0 +1,18 @@
+version: '3.8'
+
+services:
+  assistant:
+    build:
+      context: .
+      dockerfile: deploy/Dockerfile
+    container_name: samuel_personal_assistant
+    restart: always
+    ports:
+      - "8080:8080"
+    env_file:
+      - .env
+    volumes:
+      - assistant_data:/app/data
+
+volumes:
+  assistant_data:

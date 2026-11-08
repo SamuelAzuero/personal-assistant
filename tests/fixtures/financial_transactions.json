@@ -1,0 +1,138 @@
+{
+  "valid_transactions": [
+    {
+      "id": "tx_001",
+      "user_id": "usr_test_default",
+      "amount": 3200.00,
+      "amount_cents": 320000,
+      "currency": "USD",
+      "category": "Salary",
+      "type": "income",
+      "date": "2026-11-01T09:00:00Z",
+      "description": "Monthly Salary Direct Deposit"
+    },
+    {
+      "id": "tx_002",
+      "user_id": "usr_test_default",
+      "amount": 1250.00,
+      "amount_cents": 125000,
+      "currency": "USD",
+      "category": "Housing",
+      "type": "expense",
+      "date": "2026-11-01T12:00:00Z",
+      "description": "Apartment Rent Payment"
+    },
+    {
+      "id": "tx_003",
+      "user_id": "usr_test_default",
+      "amount": 78.45,
+      "amount_cents": 7845,
+      "currency": "USD",
+      "category": "Groceries",
+      "type": "expense",
+      "date": "2026-11-02T16:30:00Z",
+      "description": "Trader Joe's groceries"
+    },
+    {
+      "id": "tx_004",
+      "user_id": "usr_test_default",
+      "amount": 18.50,
+      "amount_cents": 1850,
+      "currency": "USD",
+      "category": "Food/Dining",
+      "type": "expense",
+      "date": "2026-11-03T12:15:00Z",
+      "description": "Lunch at Chipotle"
+    },
+    {
+      "id": "tx_005",
+      "user_id": "usr_test_default",
+      "amount": 45.00,
+      "amount_cents": 4500,
+      "currency": "USD",
+      "category": "Utilities",
+      "type": "expense",
+      "date": "2026-11-04T08:00:00Z",
+      "description": "Internet Bill"
+    }
+  ],
+  "category_breakdown_dataset": [
+    {
+      "amount": 120.00,
+      "amount_cents": 12000,
+      "category": "Food",
+      "type": "expense",
+      "description": "Weekly food"
+    },
+    {
+      "amount": 80.00,
+      "amount_cents": 8000,
+      "category": "Utilities",
+      "type": "expense",
+      "description": "Electric bill"
+    },
+    {
+      "amount": 50.00,
+      "amount_cents": 5000,
+      "category": "Transport",
+      "type": "expense",
+      "description": "Metro pass"
+    }
+  ],
+  "edge_case_transactions": [
+    {
+      "case_id": "EDGE_ZERO_AMOUNT",
+      "payload": {
+        "amount": 0.00,
+        "category": "Food",
+        "type": "expense",
+        "description": "Free item"
+      },
+      "expected_status": 422,
+      "expected_error": "greater_than_zero"
+    },
+    {
+      "case_id": "EDGE_NEGATIVE_AMOUNT",
+      "payload": {
+        "amount": -45.00,
+        "category": "Dining",
+        "type": "expense",
+        "description": "Negative expense attempt"
+      },
+      "expected_status": 422,
+      "expected_error": "must_be_positive"
+    },
+    {
+      "case_id": "EDGE_FLOAT_PRECISION",
+      "transactions": [
+        {"amount": 0.10, "type": "income", "category": "Other", "description": "Dime"},
+        {"amount": 0.20, "type": "income", "category": "Other", "description": "Two dimes"},
+        {"amount": 0.30, "type": "expense", "category": "Other", "description": "Expense"}
+      ],
+      "expected_net_balance_cents": 0,
+      "expected_net_balance_display": "0.00"
+    },
+    {
+      "case_id": "EDGE_EXTREME_VALUE",
+      "payload": {
+        "amount": 999999999999.99,
+        "category": "Investments",
+        "type": "income",
+        "description": "Trillion dollar rounding test"
+      },
+      "expected_status": 201,
+      "expected_amount_cents": 99999999999999
+    },
+    {
+      "case_id": "EDGE_MALFORMED_DATE",
+      "payload": {
+        "amount": 25.00,
+        "category": "Food",
+        "type": "expense",
+        "description": "Invalid date",
+        "date": "2026-02-31"
+      },
+      "expected_status": 422
+    }
+  ]
+}

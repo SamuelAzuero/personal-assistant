@@ -1,0 +1,133 @@
+{
+  "messages": [
+    {
+      "id": "msg_urgent_001",
+      "threadId": "th_001",
+      "labelIds": ["UNREAD", "INBOX", "IMPORTANT"],
+      "snippet": "URGENT: Production outage reported in us-central1 cluster...",
+      "payload": {
+        "headers": [
+          {"name": "From", "value": "cto@company.com"},
+          {"name": "Subject", "value": "URGENT: Production outage reported in us-central1"},
+          {"name": "Date", "value": "Wed, 04 Nov 2026 11:30:00 +0000"},
+          {"name": "X-Priority", "value": "1"}
+        ],
+        "mimeType": "text/plain",
+        "body": {
+          "size": 185,
+          "data": "UGxlYXNlIGxvZyBvbiBpbW1lZGlhdGVseS4gVGhlIGF1dGhlbnRpY2F0aW9uIGdhdGV3YXkgaXMgZG93bi4="
+        }
+      },
+      "decoded_body": "Please log on immediately. The authentication gateway is down.",
+      "expected_classification": {
+        "urgency_score": 95,
+        "category": "URGENT",
+        "is_actionable": true,
+        "should_proactively_alert": true
+      }
+    },
+    {
+      "id": "msg_newsletter_002",
+      "threadId": "th_002",
+      "labelIds": ["UNREAD", "INBOX", "CATEGORY_PROMOTIONS"],
+      "snippet": "Discover the latest Python 3.12 performance enhancements...",
+      "payload": {
+        "headers": [
+          {"name": "From", "value": "newsletter@pythondigest.org"},
+          {"name": "Subject", "value": "Python Weekly Issue #612"},
+          {"name": "Date", "value": "Wed, 04 Nov 2026 09:00:00 +0000"},
+          {"name": "List-Unsubscribe", "value": "<https://pythondigest.org/unsub?id=8831>"}
+        ],
+        "mimeType": "text/html",
+        "body": {
+          "size": 1240,
+          "data": "PGh0bWw+PGJvZHk+V2VsY29tZSB0byB0aGlzIHdlZWsncyBQeXRob24gZ3VpZGUuLi48L2JvZHk+PC9odG1sPg=="
+        }
+      },
+      "decoded_body": "<html><body>Welcome to this week's Python guide...</body></html>",
+      "expected_classification": {
+        "urgency_score": 10,
+        "category": "NEWSLETTER",
+        "is_actionable": false,
+        "should_proactively_alert": false
+      }
+    },
+    {
+      "id": "msg_work_action_003",
+      "threadId": "th_003",
+      "labelIds": ["UNREAD", "INBOX"],
+      "snippet": "Please review the attached contract by Friday at 3 PM...",
+      "payload": {
+        "headers": [
+          {"name": "From", "value": "legal@partnercorp.com"},
+          {"name": "Subject", "value": "Contract Review Required"},
+          {"name": "Date", "value": "Wed, 04 Nov 2026 10:15:00 +0000"}
+        ],
+        "mimeType": "text/plain",
+        "body": {
+          "size": 110,
+          "data": "UGxlYXNlIHJldmlldyBhdHRhY2hlZCBjb250cmFjdCBieSBGcmlkYXkgMyBQTS4="
+        }
+      },
+      "decoded_body": "Please review attached contract by Friday 3 PM.",
+      "expected_classification": {
+        "urgency_score": 75,
+        "category": "WORK",
+        "is_actionable": true,
+        "action_item": "Review attached contract by Friday 3 PM"
+      }
+    },
+    {
+      "id": "msg_flight_delay_004",
+      "threadId": "th_004",
+      "labelIds": ["UNREAD", "INBOX", "IMPORTANT"],
+      "snippet": "URGENT: Flight 204 delayed to 4:00 PM...",
+      "payload": {
+        "headers": [
+          {"name": "From", "value": "airline@updates.com"},
+          {"name": "Subject", "value": "URGENT: Flight 204 delayed to 4:00 PM"},
+          {"name": "Date", "value": "Wed, 04 Nov 2026 11:45:00 +0000"},
+          {"name": "X-Priority", "value": "1"}
+        ],
+        "mimeType": "text/plain",
+        "body": {
+          "size": 85,
+          "data": "RmxpZ2h0IDIwNCBoYXMgYmVlbiBkZWxheWVkIHRvIDQ6MDAgUE0gdG9kYXku"
+        }
+      },
+      "decoded_body": "Flight 204 has been delayed to 4:00 PM today.",
+      "expected_classification": {
+        "urgency_score": 90,
+        "category": "URGENT",
+        "is_actionable": true,
+        "should_proactively_alert": true
+      }
+    },
+    {
+      "id": "msg_spam_fake_urgent_005",
+      "threadId": "th_005",
+      "labelIds": ["UNREAD", "INBOX"],
+      "snippet": "URGENT FLASH SALE: 90% OFF SHOES! Don't miss out...",
+      "payload": {
+        "headers": [
+          {"name": "From", "value": "deals@shoeoutlet.com"},
+          {"name": "Subject", "value": "URGENT FLASH SALE: 90% OFF SHOES!"},
+          {"name": "List-Unsubscribe", "value": "<mailto:unsub@shoeoutlet.com>"},
+          {"name": "Date", "value": "Wed, 04 Nov 2026 08:30:00 +0000"}
+        ],
+        "mimeType": "text/plain",
+        "body": {
+          "size": 75,
+          "data": "Q2xpY2sgaGVyZSB0byBzYXZlIDkwJSBvZmYgeW91ciBmYXZvcml0ZSBzaG9lcyE="
+        }
+      },
+      "decoded_body": "Click here to save 90% off your favorite shoes!",
+      "expected_classification": {
+        "urgency_score": 15,
+        "category": "MARKETING_NOISE",
+        "is_actionable": false,
+        "should_proactively_alert": false
+      }
+    }
+  ]
+}

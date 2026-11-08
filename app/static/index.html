@@ -1,0 +1,313 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Personal Assistant — Asistente Personal Autónomo</title>
+  <link rel="stylesheet" href="/static/css/styles.css">
+  <!-- Chart.js para análisis financieros visuales responsivos -->
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+</head>
+<body>
+  <!-- Barra de Navegación Superior -->
+  <header class="navbar">
+    <div class="nav-brand">
+      <span class="brand-icon">🤖</span>
+      <div class="brand-text">
+        <h1 class="brand-title">Asistente Personal</h1>
+        <span class="brand-subtitle">Personal Assistant — Productividad Autónoma &amp; Control Financiero</span>
+      </div>
+    </div>
+    <div class="nav-actions">
+      <span id="service-status" class="badge badge-success">
+        <span class="pulse-dot"></span> En línea (Cloud Run)
+      </span>
+      <button id="btn-refresh" class="btn btn-secondary btn-sm" title="Actualizar Panel">
+        🔄 Actualizar
+      </button>
+      <button id="btn-open-transaction-modal" class="btn btn-primary btn-sm">
+        + Nueva Transacción
+      </button>
+      <button id="btn-open-task-modal" class="btn btn-secondary btn-sm">
+        + Nueva Tarea
+      </button>
+    </div>
+  </header>
+
+  <!-- Contenedor Principal -->
+  <main class="dashboard-container">
+    <!-- Banner Superior de Notificaciones -->
+    <div id="alert-banner" class="alert-banner hidden"></div>
+
+    <!-- Sección 1: Tarjetas KPI Financieras -->
+    <section class="kpi-grid" aria-label="Resumen Financiero">
+      <div class="kpi-card" id="kpi-balance-card">
+        <div class="kpi-header">
+          <span class="kpi-label">Saldo Neto</span>
+          <span class="kpi-icon">💰</span>
+        </div>
+        <div class="kpi-value" id="kpi-net-balance">$0 COP</div>
+        <div class="kpi-subtext" id="kpi-balance-status">Consolidado general</div>
+      </div>
+
+      <div class="kpi-card" id="kpi-income-card">
+        <div class="kpi-header">
+          <span class="kpi-label">Ingresos Totales</span>
+          <span class="kpi-icon">📈</span>
+        </div>
+        <div class="kpi-value text-success" id="kpi-total-income">$0 COP</div>
+        <div class="kpi-subtext">Ganancias acumuladas</div>
+      </div>
+
+      <div class="kpi-card" id="kpi-expenses-card">
+        <div class="kpi-header">
+          <span class="kpi-label">Gastos Totales</span>
+          <span class="kpi-icon">📉</span>
+        </div>
+        <div class="kpi-value text-danger" id="kpi-total-expenses">$0 COP</div>
+        <div class="kpi-subtext">Gastos acumulados</div>
+      </div>
+
+      <div class="kpi-card" id="kpi-savings-card">
+        <div class="kpi-header">
+          <span class="kpi-label">Tasa de Ahorro</span>
+          <span class="kpi-icon">🎯</span>
+        </div>
+        <div class="kpi-value text-primary" id="kpi-savings-rate">0.0%</div>
+        <div class="kpi-subtext" id="kpi-savings-subtext">Retención de ingresos</div>
+      </div>
+    </section>
+
+    <!-- Sección 2: Gráficos Visuales -->
+    <section class="charts-grid" aria-label="Gráficos Financieros">
+      <div class="card chart-card">
+        <div class="card-header">
+          <h2 class="card-title">Gastos por Categoría</h2>
+          <span class="card-badge">Distribución</span>
+        </div>
+        <div class="chart-wrapper">
+          <canvas id="categoryChart"></canvas>
+        </div>
+      </div>
+
+      <div class="card chart-card">
+        <div class="card-header">
+          <h2 class="card-title">Tendencias Mensuales</h2>
+          <span class="card-badge">Ingresos vs Gastos</span>
+        </div>
+        <div class="chart-wrapper">
+          <canvas id="trendChart"></canvas>
+        </div>
+      </div>
+    </section>
+
+    <!-- Sección 3: Columnas Dobles (Transacciones & Tareas) -->
+    <div class="main-grid">
+      <!-- Columna Izquierda: Libro de Transacciones Recientes -->
+      <section class="card ledger-card" aria-label="Registro de Transacciones">
+        <div class="card-header">
+          <div>
+            <h2 class="card-title">Últimas Transacciones</h2>
+            <p class="card-desc">Registro en tiempo real desde Telegram y el Panel</p>
+          </div>
+          <div class="ledger-filters">
+            <select id="transaction-filter-type" class="form-select form-select-sm">
+              <option value="all">Todos los tipos</option>
+              <option value="expense">Gastos</option>
+              <option value="income">Ingresos</option>
+            </select>
+          </div>
+        </div>
+
+        <div class="table-responsive">
+          <table class="ledger-table" id="transactions-table">
+            <thead>
+              <tr>
+                <th>Fecha</th>
+                <th>Categoría</th>
+                <th>Descripción</th>
+                <th>Tipo</th>
+                <th class="text-right">Monto</th>
+                <th class="text-center">Acción</th>
+              </tr>
+            </thead>
+            <tbody id="transactions-tbody">
+              <tr>
+                <td colspan="6" class="text-center muted-row">Cargando transacciones...</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </section>
+
+      <!-- Columna Derecha: Tablero de Tareas y Agenda -->
+      <section class="card tasks-card" aria-label="Tablero de Tareas">
+        <div class="card-header">
+          <div>
+            <h2 class="card-title">Tareas &amp; Recordatorios</h2>
+            <p class="card-desc">Pendientes sincronizados con tu asistente personal</p>
+          </div>
+          <div class="task-filters">
+            <select id="task-filter-status" class="form-select form-select-sm">
+              <option value="all">Todas</option>
+              <option value="pending" selected>Pendientes</option>
+              <option value="completed">Completadas</option>
+            </select>
+          </div>
+        </div>
+
+        <div class="task-list-wrapper">
+          <ul class="task-list" id="task-list">
+            <li class="muted-row">Cargando tareas...</li>
+          </ul>
+        </div>
+      </section>
+    </div>
+
+    <!-- Sección 4: Widgets Auxiliares (Correos & Ocio) -->
+    <section class="widgets-grid" aria-label="Widgets de Inteligencia">
+      <!-- Widget de Resumen de Correos -->
+      <div class="card widget-card">
+        <div class="card-header">
+          <div class="widget-title-group">
+            <span class="widget-icon">✉️</span>
+            <div>
+              <h2 class="card-title">Resumen de Correos Urgentes</h2>
+              <p class="card-desc">Monitoreo de Gmail y clasificador por prioridad</p>
+            </div>
+          </div>
+          <span id="urgent-email-badge" class="badge badge-warning">0 Urgentes</span>
+        </div>
+        <div class="widget-content" id="email-digest-list">
+          <div class="muted-row">Cargando resumen de correos...</div>
+        </div>
+      </div>
+
+      <!-- Widget de Ocio y Salidas -->
+      <div class="card widget-card">
+        <div class="card-header">
+          <div class="widget-title-group">
+            <span class="widget-icon">🍽️</span>
+            <div>
+              <h2 class="card-title">Planes y Restaurantes Recomendados</h2>
+              <p class="card-desc">Investigación de ocio y entretenimiento</p>
+            </div>
+          </div>
+          <span class="badge badge-info">Sugerencias Destacadas</span>
+        </div>
+        <div class="widget-content" id="outings-list">
+          <div class="muted-row">Cargando recomendaciones...</div>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <!-- Cuadro de Diálogo Modal: Registro Rápido de Transacción -->
+  <dialog id="transaction-dialog" aria-labelledby="tx-dialog-title" class="modal-dialog">
+    <div class="dialog-content">
+      <div class="dialog-header">
+        <h2 id="tx-dialog-title" class="dialog-title">Registrar Transacción Financiera</h2>
+        <button type="button" class="btn-close" id="btn-close-tx-dialog" aria-label="Cerrar ventana">&times;</button>
+      </div>
+      <form id="transaction-form" class="dialog-form">
+        <div class="form-group">
+          <label for="tx-amount">Monto ($ COP) *</label>
+          <input type="number" id="tx-amount" name="amount" step="100" min="1" placeholder="ej. 50000" required autofocus class="form-input">
+        </div>
+
+        <div class="form-row">
+          <div class="form-group form-col">
+            <label for="tx-type">Tipo de Transacción *</label>
+            <select id="tx-type" name="type" required class="form-select">
+              <option value="expense" selected>Gasto</option>
+              <option value="income">Ingreso</option>
+            </select>
+          </div>
+
+          <div class="form-group form-col">
+            <label for="tx-category">Categoría *</label>
+            <select id="tx-category" name="category" required class="form-select">
+              <option value="Food & Dining">Alimentación</option>
+              <option value="Groceries">Mercado</option>
+              <option value="Transportation">Transporte</option>
+              <option value="Housing & Utilities">Vivienda y Servicios</option>
+              <option value="Entertainment">Entretenimiento</option>
+              <option value="Shopping">Compras</option>
+              <option value="Health & Wellness">Salud y Bienestar</option>
+              <option value="Income">Ingresos</option>
+              <option value="Other">Otros</option>
+            </select>
+          </div>
+        </div>
+
+        <div class="form-group">
+          <label for="tx-description">Descripción / Concepto *</label>
+          <input type="text" id="tx-description" name="description" placeholder="ej. Almuerzo corrientazo o Mercado Éxito" required class="form-input">
+        </div>
+
+        <div class="form-group">
+          <label for="tx-date">Fecha (Opcional)</label>
+          <input type="date" id="tx-date" name="date" class="form-input">
+        </div>
+
+        <div class="dialog-actions">
+          <button type="button" class="btn btn-secondary" id="btn-cancel-tx">Cancelar</button>
+          <button type="submit" class="btn btn-primary" id="btn-submit-tx">Guardar Transacción</button>
+        </div>
+      </form>
+    </div>
+  </dialog>
+
+  <!-- Cuadro de Diálogo Modal: Registro Rápido de Tarea -->
+  <dialog id="task-dialog" aria-labelledby="task-dialog-title" class="modal-dialog">
+    <div class="dialog-content">
+      <div class="dialog-header">
+        <h2 id="task-dialog-title" class="dialog-title">Crear Nueva Tarea</h2>
+        <button type="button" class="btn-close" id="btn-close-task-dialog" aria-label="Cerrar ventana">&times;</button>
+      </div>
+      <form id="task-form" class="dialog-form">
+        <div class="form-group">
+          <label for="task-title">Título de la Tarea *</label>
+          <input type="text" id="task-title" name="title" placeholder="ej. Entregar taller de universidad o pagar recibo" required autofocus class="form-input">
+        </div>
+
+        <div class="form-row">
+          <div class="form-group form-col">
+            <label for="task-priority">Prioridad *</label>
+            <select id="task-priority" name="priority" class="form-select">
+              <option value="low">Baja</option>
+              <option value="medium" selected>Media</option>
+              <option value="high">Alta</option>
+              <option value="urgent">Urgente</option>
+            </select>
+          </div>
+
+          <div class="form-group form-col">
+            <label for="task-category">Categoría</label>
+            <input type="text" id="task-category" name="category" placeholder="universidad / personal / finanzas" value="general" class="form-input">
+          </div>
+        </div>
+
+        <div class="form-group">
+          <label for="task-due-date">Fecha y Hora Límite</label>
+          <input type="datetime-local" id="task-due-date" name="due_date" class="form-input">
+        </div>
+
+        <div class="form-group">
+          <label for="task-description">Descripción (Opcional)</label>
+          <textarea id="task-description" name="description" rows="2" placeholder="Notas o contexto adicional de la tarea" class="form-input"></textarea>
+        </div>
+
+        <div class="dialog-actions">
+          <button type="button" class="btn btn-secondary" id="btn-cancel-task">Cancelar</button>
+          <button type="submit" class="btn btn-primary" id="btn-submit-task">Agregar Tarea</button>
+        </div>
+      </form>
+    </div>
+  </dialog>
+
+  <!-- Scripts de la Aplicación -->
+  <script src="/static/js/charts.js"></script>
+  <script src="/static/js/app.js"></script>
+</body>
+</html>

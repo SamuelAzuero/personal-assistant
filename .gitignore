@@ -1,0 +1,91 @@
+# ==============================================================================
+# Git Ignore Configuration for Autonomous Personal Assistant
+# ==============================================================================
+
+# --- Environment & Secret Configuration ---
+.env
+.env.*
+!.env.example
+*.env
+deploy/cloud_run_env.yaml
+deploy/*.yaml
+!deploy/cloudrun.yaml
+!deploy/*.yaml.example
+
+# --- Databases & Persistent Storage ---
+*.db
+*.sqlite
+*.sqlite3
+*.db-journal
+*.db-wal
+*.db-shm
+data/*.db
+data/*.sqlite
+data/*.sqlite3
+
+# --- Python Virtual Environments ---
+.venv/
+venv/
+env/
+ENV/
+env.bak/
+venv.bak/
+
+# --- Python Bytecode, Caches & Build Artifacts ---
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+share/python-wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+
+# --- Testing & Quality Assurance ---
+.pytest_cache/
+.coverage
+.coverage.*
+htmlcov/
+.tox/
+.nox/
+nosetests.xml
+coverage.xml
+*.cover
+*.py,cover
+.hypothesis/
+.mypy_cache/
+.ruff_cache/
+
+# --- Cloud & Deployment Artifacts ---
+.gcloud/
+.gcloudignore.bak
+
+# --- Operating System & Editor Artifacts ---
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+*.swp
+*.swo
+*~
+.vscode/
+.idea/
+
+# --- Multi-Agent Workspace Metadata ---
+.agents/

@@ -1,0 +1,49 @@
+{
+  "text_update": {
+    "update_id": 100001,
+    "message": {
+      "message_id": 501,
+      "from": {
+        "id": 998877,
+        "is_bot": false,
+        "first_name": "TestUser",
+        "username": "testuser"
+      },
+      "chat": {
+        "id": 998877,
+        "type": "private"
+      },
+      "date": 1793793600,
+      "text": "Spent $18.50 on lunch at Chipotle"
+    }
+  },
+  "voice_update": {
+    "update_id": 100002,
+    "message": {
+      "message_id": 502,
+      "from": {
+        "id": 998877,
+        "is_bot": false,
+        "first_name": "TestUser"
+      },
+      "chat": {
+        "id": 998877,
+        "type": "private"
+      },
+      "date": 1793793660,
+      "voice": {
+        "file_id": "voice_file_groceries_7845",
+        "file_unique_id": "uniq_7845",
+        "duration": 4,
+        "mime_type": "audio/ogg"
+      }
+    }
+  },
+  "mock_stt_transcripts": {
+    "voice_file_groceries_7845": "Spent $78.45 on groceries at Trader Joe's",
+    "voice_file_schedule_tomorrow": "What meetings do I have tomorrow?",
+    "voice_file_morning_briefing": "Good morning! What's my schedule today, do I have any urgent emails, and what is my bank balance?",
+    "voice_file_bistro_expense": "Spent $88 at Bistro Pierre on dinner",
+    "voice_file_corrupted": "__CORRUPTED_AUDIO_PAYLOAD__"
+  }
+}

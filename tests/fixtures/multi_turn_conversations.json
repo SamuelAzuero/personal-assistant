@@ -1,0 +1,61 @@
+{
+  "slot_filling_flow": {
+    "flow_id": "finance_missing_amount",
+    "description": "User specifies expense without amount; system prompts for amount and recovers",
+    "turns": [
+      {
+        "turn": 1,
+        "input": "I just bought groceries",
+        "expected_intent": "finance_entry",
+        "expected_is_complete": false,
+        "expected_missing_slots": ["amount"],
+        "bot_response_contains": "How much"
+      },
+      {
+        "turn": 2,
+        "input": "$54.20 at Safeway",
+        "expected_is_complete": true,
+        "expected_amount_cents": 5420,
+        "expected_category": "Groceries",
+        "bot_response_contains": "Recorded expense"
+      }
+    ]
+  },
+  "pronoun_resolution_flow": {
+    "flow_id": "outing_to_calendar",
+    "description": "User searches outing, then refers to the recommended venue as 'there'",
+    "turns": [
+      {
+        "turn": 1,
+        "input": "Find top-rated Italian restaurants near Downtown",
+        "expected_intent": "outing_research",
+        "bot_response_contains": "Trattoria Stella"
+      },
+      {
+        "turn": 2,
+        "input": "Book dinner there tomorrow from 7 PM to 9 PM",
+        "expected_intent": "calendar_schedule",
+        "expected_resolved_title": "Dinner at Trattoria Stella",
+        "expected_start": "2026-11-05T19:00:00Z",
+        "expected_end": "2026-11-05T21:00:00Z"
+      }
+    ]
+  },
+  "cancellation_flow": {
+    "flow_id": "cancel_active_flow",
+    "description": "User starts a flow and then cancels it with /cancel",
+    "turns": [
+      {
+        "turn": 1,
+        "input": "Record an expense",
+        "expected_is_complete": false
+      },
+      {
+        "turn": 2,
+        "input": "/cancel",
+        "expected_intent": "cancel",
+        "bot_response_contains": "Cancelled"
+      }
+    ]
+  }
+}
