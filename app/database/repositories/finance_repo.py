@@ -1,9 +1,10 @@
 """Finance repository: Typed data access layer with exact integer cents to eliminate floating-point drift."""
 
+import re
 import sqlite3
 import uuid
 from dataclasses import dataclass
-from datetime import datetime, timezone
+from datetime import datetime, time, timedelta, timezone
 from enum import Enum
 from typing import Any, Dict, List, Optional, Union
 
@@ -28,10 +29,35 @@ def parse_datetime(dt_val: Union[datetime, str, None]) -> datetime:
         # Handle trailing Z
         if cleaned.endswith("Z"):
             cleaned = cleaned[:-1] + "+00:00"
-        dt = datetime.fromisoformat(cleaned)
-        if dt.tzinfo is None:
-            return dt.replace(tzinfo=timezone.utc)
-        return dt.astimezone(timezone.utc)
+        try:
+            dt = datetime.fromisoformat(cleaned)
+            if dt.tzinfo is None:
+                return dt.replace(tzinfo=timezone.utc)
+            return dt.astimezone(timezone.utc)
+        except ValueError:
+            weekdays_map = {
+                "lunes": 0, "monday": 0,
+                "martes": 1, "tuesday": 1,
+                "miércoles": 2, "miercoles": 2, "wednesday": 2,
+                "jueves": 3, "thursday": 3,
+                "viernes": 4, "friday": 4,
+                "sábado": 5, "sabado": 5, "saturday": 5,
+                "domingo": 6, "sunday": 6,
+            }
+            lower = cleaned.lower()
+            now = datetime.now(timezone.utc)
+            base_date = now.date()
+            if "mañana" in lower or "manana" in lower or "tomorrow" in lower:
+                target_date = base_date + timedelta(days=1)
+                return datetime.combine(target_date, time(hour=9, minute=0, tzinfo=timezone.utc))
+            if "hoy" in lower or "today" in lower:
+                return datetime.combine(base_date, time(hour=9, minute=0, tzinfo=timezone.utc))
+            for day_name, day_num in weekdays_map.items():
+                if re.search(rf"\b{day_name}\b", lower):
+                    days_ahead = (day_num - base_date.weekday() + 7) % 7 or 7
+                    target_date = base_date + timedelta(days=days_ahead)
+                    return datetime.combine(target_date, time(hour=9, minute=0, tzinfo=timezone.utc))
+            raise ValueError(f"Invalid isoformat string: {cleaned!r}")
     raise ValueError(f"Unsupported datetime type: {type(dt_val)}")
 
 
@@ -46,6 +72,8 @@ class TransactionRecord:
     timestamp: datetime
     created_at: Optional[datetime] = None
     idempotency_key: Optional[str] = None
+    account_id: Optional[str] = None
+    account_name: Optional[str] = None
 
     @property
     def amount(self) -> float:
@@ -67,6 +95,8 @@ class TransactionRecord:
             "timestamp": self.timestamp.isoformat(),
             "created_at": self.created_at.isoformat() if self.created_at else None,
             "idempotency_key": self.idempotency_key,
+            "account_id": self.account_id,
+            "account_name": self.account_name,
         }
 
 
@@ -94,6 +124,8 @@ class FinanceRepository:
         timestamp: Optional[Union[datetime, str]] = None,
         transaction_id: Optional[str] = None,
         idempotency_key: Optional[str] = None,
+        account_id: Optional[str] = None,
+        account_name: Optional[str] = None,
     ) -> TransactionRecord:
         """Record a transaction with integer cents. Supports idempotency deduplication."""
         if isinstance(transaction_type, str):
@@ -119,8 +151,9 @@ class FinanceRepository:
                     """
                     INSERT INTO transactions (
                         transaction_id, user_id, amount_cents, transaction_type,
-                        category, description, timestamp, created_at, idempotency_key
-                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?);
+                        category, description, timestamp, created_at, idempotency_key,
+                        account_id, account_name
+                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);
                     """,
                     (
                         tx_id,
@@ -132,6 +165,8 @@ class FinanceRepository:
                         iso_timestamp,
                         iso_created_at,
                         idempotency_key,
+                        account_id,
+                        account_name,
                     ),
                 )
         except sqlite3.IntegrityError:
@@ -151,6 +186,8 @@ class FinanceRepository:
             timestamp=tx_time,
             created_at=now_time,
             idempotency_key=idempotency_key,
+            account_id=account_id,
+            account_name=account_name,
         )
 
     def get_transaction(self, transaction_id: str) -> Optional[TransactionRecord]:
@@ -409,6 +446,8 @@ class FinanceRepository:
         raw_created = row["created_at"]
         parsed_created = parse_datetime(raw_created) if raw_created else None
         key = row["idempotency_key"] if "idempotency_key" in row.keys() else None
+        acc_id = row["account_id"] if "account_id" in row.keys() else None
+        acc_name = row["account_name"] if "account_name" in row.keys() else None
 
         return TransactionRecord(
             id=row["transaction_id"],
@@ -420,4 +459,6 @@ class FinanceRepository:
             timestamp=parsed_ts,
             created_at=parsed_created,
             idempotency_key=key,
+            account_id=acc_id,
+            account_name=acc_name,
         )

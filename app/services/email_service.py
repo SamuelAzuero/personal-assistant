@@ -6,7 +6,6 @@ import base64
 import re
 from typing import Any, Dict, List, Optional
 from app.integrations.gmail_client import GmailClient
-from app.integrations.mocks import MockGmailClient
 
 
 URGENT_SUBJECT_KEYWORDS = [

@@ -33,6 +33,8 @@ CREATE TABLE IF NOT EXISTS transactions (
     timestamp TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     idempotency_key TEXT UNIQUE,
+    account_id TEXT,
+    account_name TEXT,
     FOREIGN KEY (user_id) REFERENCES users(user_id) ON DELETE CASCADE
 );
 CREATE INDEX IF NOT EXISTS idx_transactions_user_date ON transactions(user_id, timestamp);
@@ -97,3 +99,102 @@ CREATE TABLE IF NOT EXISTS email_messages (
     FOREIGN KEY (user_id) REFERENCES users(user_id) ON DELETE CASCADE
 );
 CREATE INDEX IF NOT EXISTS idx_email_user_urgent ON email_messages(user_id, is_urgent, received_at);
+
+-- 8. Accounts & Digital Wallets (R2)
+CREATE TABLE IF NOT EXISTS accounts (
+    account_id TEXT PRIMARY KEY,
+    user_id TEXT NOT NULL,
+    name TEXT NOT NULL,                      -- 'Efectivo', 'Nequi', 'Nu', 'Daviplata', 'Bancolombia'
+    account_type TEXT NOT NULL DEFAULT 'digital_wallet', -- 'cash', 'digital_wallet', 'bank_account', 'savings'
+    balance_cents INTEGER NOT NULL DEFAULT 0,
+    currency TEXT NOT NULL DEFAULT 'COP',
+    color TEXT,
+    icon TEXT,
+    is_active BOOLEAN NOT NULL DEFAULT 1,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    UNIQUE(user_id, name),
+    FOREIGN KEY (user_id) REFERENCES users(user_id) ON DELETE CASCADE
+);
+CREATE INDEX IF NOT EXISTS idx_accounts_user_active ON accounts(user_id, is_active);
+
+-- 9. Inter-Account Transfers (R2)
+CREATE TABLE IF NOT EXISTS transfers (
+    transfer_id TEXT PRIMARY KEY,
+    user_id TEXT NOT NULL,
+    from_account_id TEXT NOT NULL,
+    to_account_id TEXT NOT NULL,
+    from_account_name TEXT,
+    to_account_name TEXT,
+    amount_cents INTEGER NOT NULL CHECK (amount_cents > 0),
+    fee_cents INTEGER NOT NULL DEFAULT 0 CHECK (fee_cents >= 0),
+    description TEXT,
+    timestamp TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (user_id) REFERENCES users(user_id) ON DELETE CASCADE,
+    FOREIGN KEY (from_account_id) REFERENCES accounts(account_id) ON DELETE RESTRICT,
+    FOREIGN KEY (to_account_id) REFERENCES accounts(account_id) ON DELETE RESTRICT
+);
+CREATE INDEX IF NOT EXISTS idx_transfers_user_date ON transfers(user_id, timestamp);
+
+-- 10. Debts & Receivables Ledger (R1)
+CREATE TABLE IF NOT EXISTS debts (
+    debt_id TEXT PRIMARY KEY,
+    user_id TEXT NOT NULL,
+    debt_type TEXT NOT NULL CHECK (debt_type IN ('debt', 'receivable')),
+    counterparty TEXT NOT NULL,
+    amount_cents INTEGER NOT NULL CHECK (amount_cents > 0),
+    remaining_cents INTEGER NOT NULL CHECK (remaining_cents >= 0),
+    reason TEXT NOT NULL,
+    due_date TIMESTAMP,
+    status TEXT NOT NULL DEFAULT 'active' CHECK (status IN ('active', 'partially_paid', 'settled', 'cancelled')),
+    account_id TEXT,
+    account_name TEXT,
+    paid_amount_cents INTEGER NOT NULL DEFAULT 0 CHECK (paid_amount_cents >= 0),
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    settled_at TIMESTAMP,
+    FOREIGN KEY (user_id) REFERENCES users(user_id) ON DELETE CASCADE,
+    FOREIGN KEY (account_id) REFERENCES accounts(account_id) ON DELETE SET NULL
+);
+CREATE INDEX IF NOT EXISTS idx_debts_user_status ON debts(user_id, status, due_date);
+CREATE INDEX IF NOT EXISTS idx_debts_counterparty ON debts(user_id, counterparty);
+
+-- 11. Debt & Receivable Payments / Settlements (R1)
+CREATE TABLE IF NOT EXISTS debt_payments (
+    payment_id TEXT PRIMARY KEY,
+    debt_id TEXT NOT NULL,
+    user_id TEXT NOT NULL,
+    amount_cents INTEGER NOT NULL CHECK (amount_cents > 0),
+    account_id TEXT,
+    account_name TEXT,
+    notes TEXT,
+    payment_date TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (debt_id) REFERENCES debts(debt_id) ON DELETE CASCADE,
+    FOREIGN KEY (user_id) REFERENCES users(user_id) ON DELETE CASCADE,
+    FOREIGN KEY (account_id) REFERENCES accounts(account_id) ON DELETE SET NULL
+);
+CREATE INDEX IF NOT EXISTS idx_debt_payments_debt ON debt_payments(debt_id, payment_date);
+
+-- 12. Recurring Subscriptions (R3)
+CREATE TABLE IF NOT EXISTS subscriptions (
+    subscription_id TEXT PRIMARY KEY,
+    user_id TEXT NOT NULL,
+    name TEXT NOT NULL,
+    amount_cents INTEGER NOT NULL CHECK (amount_cents > 0),
+    billing_cycle TEXT NOT NULL DEFAULT 'monthly' CHECK (billing_cycle IN ('weekly', 'monthly', 'quarterly', 'semiannual', 'annual', 'yearly')),
+    billing_day INTEGER CHECK (billing_day BETWEEN 1 AND 31),
+    next_payment_date DATE NOT NULL,
+    account_id TEXT,
+    account_name TEXT,
+    category TEXT DEFAULT 'Entertainment',
+    status TEXT NOT NULL DEFAULT 'active' CHECK (status IN ('active', 'paused', 'cancelled')),
+    reminder_days_before INTEGER DEFAULT 3,
+    notes TEXT,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (user_id) REFERENCES users(user_id) ON DELETE CASCADE,
+    FOREIGN KEY (account_id) REFERENCES accounts(account_id) ON DELETE SET NULL
+);
+CREATE INDEX IF NOT EXISTS idx_subscriptions_user_status ON subscriptions(user_id, status, next_payment_date);
+

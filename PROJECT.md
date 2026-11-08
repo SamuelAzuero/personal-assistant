@@ -108,11 +108,11 @@ The system follows a modular Clean Architecture / Ports-and-Adapters pattern in 
 | M4 | Dual User Interface & Free-Tier Cloud Packaging | Web dashboard (SPA, charts, task board), FastAPI static mount, Dockerfile, Cloud Run deploy scripts, .env.example | M1, M2, M3 | DONE |
 | M5 | Final E2E Verification & Adversarial Hardening | Phase 1: 100% E2E test suite pass rate (Tiers 1-4). Phase 2: Tier 5 adversarial coverage hardening | M1, M2, M3, M4, E2E-TEST | DONE |
 | E2E-TEST | Opaque-Box E2E Testing Suite Track | Requirement-driven 4-tier test runner & test cases (Tiers 1-4, 72+ tests) -> TEST_READY.md | none | DONE |
-| M6 | Debt & Multi-Account Banking Domain Core | DB schema extensions (accounts, transfers, debts, subscriptions), repositories, domain services, COP balance debit/credit, zero-loss transfers | none | IN_PROGRESS |
-| M7 | Conversational NLP & Dual UI Dashboard Extensions | Colombian Spanish NLP intent extractors & tool router, REST endpoints (/api/accounts, /api/debts, etc.), Web UI cards & modals | M6 | PLANNED |
-| M8 | Secrets Sanitization & Secure Git Setup | Comprehensive .gitignore, clean .env.example, git init, commit under est.samuel.azuero@unimilitar.edu.co, remote push | none | IN_PROGRESS |
-| M9 | Final Expansion E2E Verification & Hardening | 100% pass rate across baseline + new unit & E2E tests, automated git secrets scan test | M6, M7, M8, E2E-TEST-2 | PLANNED |
-| E2E-TEST-2 | Opaque-Box E2E Testing Suite Track (Expansion) | Comprehensive test suite for F60-F81 across Tiers 1-4 and secret scan -> TEST_EXPANSION_READY.md | none | IN_PROGRESS |
+| M6 | Debt & Multi-Account Banking Domain Core | DB schema extensions (accounts, transfers, debts, subscriptions), repositories, domain services, COP balance debit/credit, zero-loss transfers | none | DONE |
+| M7 | Conversational NLP & Dual UI Dashboard Extensions | Colombian Spanish NLP intent extractors & tool router, REST endpoints (/api/accounts, /api/debts, etc.), Web UI cards & modals | M6 | DONE |
+| M8 | Secrets Sanitization & Secure Git Setup | Comprehensive .gitignore, clean .env.example, git init, commit under est.samuel.azuero@unimilitar.edu.co, remote push | none | DONE |
+| M9 | Final Expansion E2E Verification & Hardening | 100% pass rate across baseline + new unit & E2E tests, automated git secrets scan test | M6, M7, M8, E2E-TEST-2 | IN_PROGRESS |
+| E2E-TEST-2 | Opaque-Box E2E Testing Suite Track (Expansion) | Comprehensive test suite for F60-F81 across Tiers 1-4 and secret scan -> TEST_EXPANSION_READY.md | none | DONE |
 
 ## Interface Contracts
 

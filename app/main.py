@@ -8,7 +8,6 @@ from contextlib import asynccontextmanager
 from datetime import datetime, timezone
 import os
 from pathlib import Path
-import sys
 from typing import Any, Dict, List, Optional
 
 from fastapi import Depends, FastAPI, HTTPException, Request, status

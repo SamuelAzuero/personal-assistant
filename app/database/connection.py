@@ -18,6 +18,33 @@ def get_db_path(custom_path: Optional[str] = None) -> str:
     return os.environ.get("DATABASE_PATH", DEFAULT_DB_PATH)
 
 
+DEFAULT_ACCOUNT_DEFINITIONS = [
+    {"name": "Efectivo", "account_type": "cash", "icon": "💵", "color": "#10b981"},
+    {"name": "Nequi", "account_type": "digital_wallet", "icon": "📱", "color": "#200020"},
+    {"name": "Nu", "account_type": "bank_account", "icon": "🟣", "color": "#820AD1"},
+    {"name": "Daviplata", "account_type": "digital_wallet", "icon": "🔴", "color": "#EE3124"},
+    {"name": "Bancolombia", "account_type": "bank_account", "icon": "🟡", "color": "#FDDA24"},
+]
+
+
+def seed_default_accounts_for_user(conn: sqlite3.Connection, user_id: str) -> None:
+    """Ensure user exists and seed default Colombian accounts if not present."""
+    conn.execute(
+        "INSERT OR IGNORE INTO users (user_id, full_name) VALUES (?, ?);",
+        (user_id, user_id),
+    )
+    for acc in DEFAULT_ACCOUNT_DEFINITIONS:
+        acc_id = f"acc_{user_id}_{acc['name'].lower()}"
+        conn.execute(
+            """
+            INSERT OR IGNORE INTO accounts (
+                account_id, user_id, name, account_type, balance_cents, currency, color, icon, is_active
+            ) VALUES (?, ?, ?, ?, 0, 'COP', ?, ?, 1);
+            """,
+            (acc_id, user_id, acc["name"], acc["account_type"], acc["color"], acc["icon"]),
+        )
+
+
 def configure_connection(conn: sqlite3.Connection, is_memory: bool = False) -> sqlite3.Connection:
     """Configure connection with WAL mode (if file-based), foreign keys, and row factory."""
     conn.row_factory = sqlite3.Row
@@ -102,6 +129,13 @@ class DatabaseManager:
         schema_ddl = schema_file.read_text(encoding="utf-8")
         with self.connection() as conn:
             conn.executescript(schema_ddl)
+            # Ensure transactions table has account_id and account_name columns
+            cursor = conn.execute("PRAGMA table_info(transactions);")
+            columns = [row[1] for row in cursor.fetchall()]
+            if "account_id" not in columns:
+                conn.execute("ALTER TABLE transactions ADD COLUMN account_id TEXT;")
+            if "account_name" not in columns:
+                conn.execute("ALTER TABLE transactions ADD COLUMN account_name TEXT;")
 
     def close(self) -> None:
         """Close persistent resources if in-memory."""

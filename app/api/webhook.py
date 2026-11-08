@@ -5,12 +5,12 @@ from typing import Any, Dict, Optional
 
 from fastapi import APIRouter, Depends, Header, HTTPException, Request, status
 
+from app.config import get_settings
 from app.core.audio import AudioNoteHandler
 from app.core.intent_parser import IntentParser
 from app.core.router import ToolRouter
 from app.core.session_manager import SessionManager
 from app.database.connection import DatabaseManager, get_default_manager
-from app.integrations.protocols import TelegramClientProtocol
 from app.integrations.telegram_client import TelegramClient
 from app.database.repositories.calendar_repo import CalendarRepository
 from app.database.repositories.task_repo import TaskRepository
@@ -19,6 +19,9 @@ from app.services.email_service import EmailService
 from app.services.finance_service import FinanceService
 from app.services.search_service import SearchService
 from app.services.task_service import TaskService
+from app.services.account_service import AccountService
+from app.services.debt_service import DebtService
+from app.services.subscription_service import SubscriptionService
 
 webhook_router = APIRouter(tags=["Telegram Webhook"])
 
@@ -53,6 +56,18 @@ def create_default_tool_router(app_state: Any = None) -> ToolRouter:
         or (app_state and getattr(app_state, "search_service", None))
         or SearchService()
     )
+    acc_svc = (
+        (app_state and getattr(app_state, "account_service", None))
+        or AccountService(conn=conn, db_manager=db_manager)
+    )
+    debt_svc = (
+        (app_state and getattr(app_state, "debt_service", None))
+        or DebtService(conn=conn, db_manager=db_manager, account_service=acc_svc)
+    )
+    sub_svc = (
+        (app_state and getattr(app_state, "subscription_service", None))
+        or SubscriptionService(conn=conn, db_manager=db_manager)
+    )
 
     return ToolRouter(
         finance_service=fin_svc,
@@ -60,6 +75,9 @@ def create_default_tool_router(app_state: Any = None) -> ToolRouter:
         calendar_service=cal_svc,
         email_service=email_svc,
         search_service=search_svc,
+        account_service=acc_svc,
+        debt_service=debt_svc,
+        subscription_service=sub_svc,
     )
 
 
@@ -68,8 +86,6 @@ _intent_parser = IntentParser()
 _session_manager = SessionManager()
 _tool_router = create_default_tool_router()
 _audio_handler = AudioNoteHandler()
-import sys
-from app.config import get_settings
 
 _settings = get_settings()
 _telegram_token = os.environ.get("TELEGRAM_BOT_TOKEN") or _settings.telegram_bot_token

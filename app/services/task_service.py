@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from datetime import datetime
 from typing import Any, Dict, List, Optional, Union
-from app.database.repositories.task_repo import Task, TaskRepository
+from app.database.repositories.task_repo import TaskRepository
 
 
 class TaskService:

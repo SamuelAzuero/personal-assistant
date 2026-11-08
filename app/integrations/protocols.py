@@ -20,6 +20,13 @@ class IntentType(str, Enum):
     DAILY_BRIEFING = "daily_briefing"
     FINANCIAL_ADVICE = "financial_advice"
     OUTING_RESEARCH = "outing_research"
+    ACCOUNT_TRANSFER = "account_transfer"
+    ACCOUNT_QUERY = "account_query"
+    DEBT_RECORD = "debt_record"
+    DEBT_SETTLE = "debt_settle"
+    DEBT_QUERY = "debt_query"
+    SUBSCRIPTION_RECORD = "subscription_record"
+    UPCOMING_PAYMENTS_QUERY = "upcoming_payments_query"
     CANCEL = "cancel"
     UNKNOWN = "unknown"
 

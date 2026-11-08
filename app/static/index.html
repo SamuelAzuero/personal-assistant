@@ -25,11 +25,20 @@
       <button id="btn-refresh" class="btn btn-secondary btn-sm" title="Actualizar Panel">
         🔄 Actualizar
       </button>
+      <button id="btn-open-transfer-modal" class="btn btn-secondary btn-sm" title="Transferir entre cuentas">
+        💸 Transferir
+      </button>
+      <button id="btn-open-debt-modal" class="btn btn-secondary btn-sm" title="Registrar deuda o préstamo">
+        🤝 Deuda / Cobro
+      </button>
+      <button id="btn-open-sub-modal" class="btn btn-secondary btn-sm" title="Agregar suscripción recurrente">
+        🔁 Suscripción
+      </button>
       <button id="btn-open-transaction-modal" class="btn btn-primary btn-sm">
-        + Nueva Transacción
+        + Transacción
       </button>
       <button id="btn-open-task-modal" class="btn btn-secondary btn-sm">
-        + Nueva Tarea
+        + Tarea
       </button>
     </div>
   </header>
@@ -75,6 +84,22 @@
         </div>
         <div class="kpi-value text-primary" id="kpi-savings-rate">0.0%</div>
         <div class="kpi-subtext" id="kpi-savings-subtext">Retención de ingresos</div>
+      </div>
+    </section>
+
+    <!-- Sección 1b: Cuentas y Distribución de Activos (Efectivo, Nequi, Nu, Daviplata, Bancolombia) -->
+    <section class="accounts-section" aria-label="Cuentas Bancarias y Billeteras">
+      <div class="section-header">
+        <div>
+          <h2 class="section-title">💼 Cuentas Bancarias &amp; Billeteras Digitales</h2>
+          <p class="section-desc">Patrimonio neto consolidado y distribución en tiempo real</p>
+        </div>
+        <div class="section-actions">
+          <button id="btn-quick-transfer" class="btn btn-secondary btn-sm">💸 Transferir</button>
+        </div>
+      </div>
+      <div class="accounts-grid" id="accounts-grid">
+        <div class="muted-row">Cargando cuentas...</div>
       </div>
     </section>
 
@@ -163,6 +188,114 @@
         </div>
       </section>
     </div>
+
+    <!-- Sección 3b: Deudas y Cuentas por Cobrar (Por Cobrar y Por Pagar) -->
+    <section class="debts-section" aria-label="Deudas y Cobros">
+      <div class="section-header">
+        <div>
+          <h2 class="section-title">🤝 Deudas &amp; Cuentas por Cobrar</h2>
+          <p class="section-desc">Préstamos otorgados y obligaciones pendientes con alertas de vencimiento</p>
+        </div>
+        <div class="section-actions">
+          <button id="btn-quick-debt" class="btn btn-secondary btn-sm">+ Registrar Deuda/Cobro</button>
+        </div>
+      </div>
+      <div class="debts-grid">
+        <!-- Columna: Por Cobrar (Receivables) -->
+        <div class="card debt-column-card">
+          <div class="card-header">
+            <div>
+              <h3 class="card-title text-success">📌 Por Cobrar (Te deben)</h3>
+              <p class="card-desc">Dinero prestado pendiente de cobro</p>
+            </div>
+            <span id="receivables-total-badge" class="badge badge-success">$0 COP</span>
+          </div>
+          <div class="table-responsive">
+            <table class="ledger-table" id="receivables-table">
+              <thead>
+                <tr>
+                  <th>Deudor</th>
+                  <th>Concepto</th>
+                  <th>Cuenta</th>
+                  <th>Monto</th>
+                  <th>Vence</th>
+                  <th>Estado</th>
+                  <th class="text-center">Acción</th>
+                </tr>
+              </thead>
+              <tbody id="receivables-tbody">
+                <tr><td colspan="7" class="text-center muted-row">Cargando cobros...</td></tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+        <!-- Columna: Por Pagar (Debts) -->
+        <div class="card debt-column-card">
+          <div class="card-header">
+            <div>
+              <h3 class="card-title text-danger">💳 Por Pagar (Debes)</h3>
+              <p class="card-desc">Obligaciones que debes cancelar</p>
+            </div>
+            <span id="payables-total-badge" class="badge badge-danger">$0 COP</span>
+          </div>
+          <div class="table-responsive">
+            <table class="ledger-table" id="payables-table">
+              <thead>
+                <tr>
+                  <th>Acreedor</th>
+                  <th>Concepto</th>
+                  <th>Cuenta</th>
+                  <th>Monto</th>
+                  <th>Vence</th>
+                  <th>Estado</th>
+                  <th class="text-center">Acción</th>
+                </tr>
+              </thead>
+              <tbody id="payables-tbody">
+                <tr><td colspan="7" class="text-center muted-row">Cargando deudas...</td></tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- Sección 3c: Suscripciones y Cronograma de Pagos -->
+    <section class="subscriptions-section" aria-label="Suscripciones y Cronograma">
+      <div class="section-header">
+        <div>
+          <h2 class="section-title">🗓️ Suscripciones &amp; Calendario de Vencimientos</h2>
+          <p class="section-desc">Servicios recurrentes y cronograma unificado de pagos a 30 días</p>
+        </div>
+        <div class="section-actions">
+          <button id="btn-quick-sub" class="btn btn-secondary btn-sm">+ Nueva Suscripción</button>
+        </div>
+      </div>
+      <div class="subs-calendar-grid">
+        <!-- Subscriptions List -->
+        <div class="card sub-list-card">
+          <div class="card-header">
+            <h3 class="card-title">🔁 Suscripciones Activas</h3>
+            <span id="subscriptions-count-badge" class="badge badge-info">0 Activas</span>
+          </div>
+          <div id="subscriptions-list" class="sub-list">
+            <div class="muted-row">Cargando suscripciones...</div>
+          </div>
+        </div>
+
+        <!-- Payment Timeline -->
+        <div class="card timeline-card">
+          <div class="card-header">
+            <h3 class="card-title">📅 Próximos Vencimientos (30 días)</h3>
+            <span class="badge badge-warning">Cronológico</span>
+          </div>
+          <div id="payment-calendar-list" class="payment-timeline-list">
+            <div class="muted-row">Cargando cronograma...</div>
+          </div>
+        </div>
+      </div>
+    </section>
 
     <!-- Sección 4: Widgets Auxiliares (Correos & Ocio) -->
     <section class="widgets-grid" aria-label="Widgets de Inteligencia">
@@ -301,6 +434,221 @@
         <div class="dialog-actions">
           <button type="button" class="btn btn-secondary" id="btn-cancel-task">Cancelar</button>
           <button type="submit" class="btn btn-primary" id="btn-submit-task">Agregar Tarea</button>
+        </div>
+      </form>
+    </div>
+  </dialog>
+
+  <!-- Modal: Transferencia Inter-Bancaria -->
+  <dialog id="transfer-dialog" aria-labelledby="transfer-dialog-title" class="modal-dialog">
+    <div class="dialog-content">
+      <div class="dialog-header">
+        <h2 id="transfer-dialog-title" class="dialog-title">💸 Transferir Entre Cuentas</h2>
+        <button type="button" class="btn-close" id="btn-close-transfer-dialog" aria-label="Cerrar ventana">&times;</button>
+      </div>
+      <form id="transfer-form" class="dialog-form">
+        <div class="form-row">
+          <div class="form-group form-col">
+            <label for="txf-from-account">Cuenta Origen *</label>
+            <select id="txf-from-account" name="from_account" required class="form-select">
+              <option value="Bancolombia" selected>Bancolombia</option>
+              <option value="Nequi">Nequi</option>
+              <option value="Nu">Nu</option>
+              <option value="Daviplata">Daviplata</option>
+              <option value="Efectivo">Efectivo</option>
+            </select>
+          </div>
+          <div class="form-group form-col">
+            <label for="txf-to-account">Cuenta Destino *</label>
+            <select id="txf-to-account" name="to_account" required class="form-select">
+              <option value="Nequi" selected>Nequi</option>
+              <option value="Bancolombia">Bancolombia</option>
+              <option value="Nu">Nu</option>
+              <option value="Daviplata">Daviplata</option>
+              <option value="Efectivo">Efectivo</option>
+            </select>
+          </div>
+        </div>
+
+        <div class="form-group">
+          <label for="txf-amount">Monto a Transferir ($ COP) *</label>
+          <input type="number" id="txf-amount" name="amount" step="1000" min="1" placeholder="ej. 100000" required class="form-input">
+        </div>
+
+        <div class="form-group">
+          <label for="txf-note">Concepto / Nota (Opcional)</label>
+          <input type="text" id="txf-note" name="note" placeholder="ej. Recarga Nequi para almuerzos" class="form-input">
+        </div>
+
+        <div class="dialog-actions">
+          <button type="button" class="btn btn-secondary" id="btn-cancel-transfer">Cancelar</button>
+          <button type="submit" class="btn btn-primary" id="btn-submit-transfer">Ejecutar Transferencia</button>
+        </div>
+      </form>
+    </div>
+  </dialog>
+
+  <!-- Modal: Registrar Deuda o Préstamo -->
+  <dialog id="debt-dialog" aria-labelledby="debt-dialog-title" class="modal-dialog">
+    <div class="dialog-content">
+      <div class="dialog-header">
+        <h2 id="debt-dialog-title" class="dialog-title">🤝 Registrar Deuda o Préstamo</h2>
+        <button type="button" class="btn-close" id="btn-close-debt-dialog" aria-label="Cerrar ventana">&times;</button>
+      </div>
+      <form id="debt-form" class="dialog-form">
+        <div class="form-row">
+          <div class="form-group form-col">
+            <label for="debt-type">Tipo de Registro *</label>
+            <select id="debt-type" name="debt_type" required class="form-select">
+              <option value="receivable" selected>📌 Por Cobrar (Le presté a alguien)</option>
+              <option value="debt">💳 Por Pagar (Alguien me prestó / Le debo)</option>
+            </select>
+          </div>
+          <div class="form-group form-col">
+            <label for="debt-counterparty">Persona / Contraparte *</label>
+            <input type="text" id="debt-counterparty" name="counterparty" placeholder="ej. Juan Pérez" required class="form-input">
+          </div>
+        </div>
+
+        <div class="form-row">
+          <div class="form-group form-col">
+            <label for="debt-amount">Monto ($ COP) *</label>
+            <input type="number" id="debt-amount" name="amount" step="1000" min="1" placeholder="ej. 50000" required class="form-input">
+          </div>
+          <div class="form-group form-col">
+            <label for="debt-account">Cuenta Vinculada *</label>
+            <select id="debt-account" name="account" class="form-select">
+              <option value="Efectivo" selected>💵 Efectivo</option>
+              <option value="Nequi">📱 Nequi</option>
+              <option value="Nu">🟣 Nu</option>
+              <option value="Daviplata">🔴 Daviplata</option>
+              <option value="Bancolombia">🟡 Bancolombia</option>
+            </select>
+          </div>
+        </div>
+
+        <div class="form-group">
+          <label for="debt-reason">Motivo / Concepto *</label>
+          <input type="text" id="debt-reason" name="reason" placeholder="ej. Almuerzo corrientazo o Transporte" required class="form-input">
+        </div>
+
+        <div class="form-group">
+          <label for="debt-due-date">Fecha Límite / Cobro (Opcional)</label>
+          <input type="date" id="debt-due-date" name="due_date" class="form-input">
+        </div>
+
+        <div class="dialog-actions">
+          <button type="button" class="btn btn-secondary" id="btn-cancel-debt">Cancelar</button>
+          <button type="submit" class="btn btn-primary" id="btn-submit-debt">Guardar Registro</button>
+        </div>
+      </form>
+    </div>
+  </dialog>
+
+  <!-- Modal: Liquidar / Abonar a Deuda -->
+  <dialog id="settle-dialog" aria-labelledby="settle-dialog-title" class="modal-dialog">
+    <div class="dialog-content">
+      <div class="dialog-header">
+        <h2 id="settle-dialog-title" class="dialog-title">✅ Liquidar / Abonar a Deuda</h2>
+        <button type="button" class="btn-close" id="btn-close-settle-dialog" aria-label="Cerrar ventana">&times;</button>
+      </div>
+      <form id="settle-form" class="dialog-form">
+        <input type="hidden" id="settle-debt-id" name="debt_id">
+
+        <div id="settle-summary-box" class="callout-box">
+          <!-- Filled dynamically by app.js -->
+        </div>
+
+        <div class="form-group">
+          <label for="settle-amount">Monto del Abono / Pago ($ COP)</label>
+          <input type="number" id="settle-amount" name="amount" step="1000" min="1" placeholder="Dejar vacío para liquidar el saldo total" class="form-input">
+          <small class="form-hint">Si dejas el monto vacío, se liquidará automáticamente el 100% restante.</small>
+        </div>
+
+        <div class="form-group">
+          <label for="settle-account">Cuenta de Pago / Cobro *</label>
+          <select id="settle-account" name="account" class="form-select">
+            <option value="Efectivo" selected>💵 Efectivo</option>
+            <option value="Nequi">📱 Nequi</option>
+            <option value="Nu">🟣 Nu</option>
+            <option value="Daviplata">🔴 Daviplata</option>
+            <option value="Bancolombia">🟡 Bancolombia</option>
+          </select>
+        </div>
+
+        <div class="form-group">
+          <label for="settle-notes">Notas / Comentarios (Opcional)</label>
+          <input type="text" id="settle-notes" name="notes" placeholder="ej. Transferencia por Nequi recibida" class="form-input">
+        </div>
+
+        <div class="dialog-actions">
+          <button type="button" class="btn btn-secondary" id="btn-cancel-settle">Cancelar</button>
+          <button type="submit" class="btn btn-success" id="btn-submit-settle">Confirmar Pago</button>
+        </div>
+      </form>
+    </div>
+  </dialog>
+
+  <!-- Modal: Agregar Suscripción Recurrente -->
+  <dialog id="sub-dialog" aria-labelledby="sub-dialog-title" class="modal-dialog">
+    <div class="dialog-content">
+      <div class="dialog-header">
+        <h2 id="sub-dialog-title" class="dialog-title">🔁 Nueva Suscripción Recurrente</h2>
+        <button type="button" class="btn-close" id="btn-close-sub-dialog" aria-label="Cerrar ventana">&times;</button>
+      </div>
+      <form id="sub-form" class="dialog-form">
+        <div class="form-row">
+          <div class="form-group form-col">
+            <label for="sub-name">Servicio / Nombre *</label>
+            <input type="text" id="sub-name" name="name" placeholder="ej. Netflix, Spotify, Gimnasio" required class="form-input">
+          </div>
+          <div class="form-group form-col">
+            <label for="sub-amount">Costo ($ COP) *</label>
+            <input type="number" id="sub-amount" name="amount" step="1000" min="1" placeholder="ej. 45000" required class="form-input">
+          </div>
+        </div>
+
+        <div class="form-row">
+          <div class="form-group form-col">
+            <label for="sub-billing-cycle">Ciclo de Facturación *</label>
+            <select id="sub-billing-cycle" name="billing_cycle" class="form-select">
+              <option value="monthly" selected>Mensual</option>
+              <option value="weekly">Semanal</option>
+              <option value="quarterly">Trimestral</option>
+              <option value="annual">Anual</option>
+            </select>
+          </div>
+          <div class="form-group form-col">
+            <label for="sub-billing-day">Día de Renovación (1-31) *</label>
+            <input type="number" id="sub-billing-day" name="billing_day" min="1" max="31" value="15" required class="form-input">
+          </div>
+        </div>
+
+        <div class="form-row">
+          <div class="form-group form-col">
+            <label for="sub-account">Cuenta Predeterminada *</label>
+            <select id="sub-account" name="account" class="form-select">
+              <option value="Nu" selected>🟣 Nu</option>
+              <option value="Bancolombia">🟡 Bancolombia</option>
+              <option value="Nequi">📱 Nequi</option>
+              <option value="Daviplata">🔴 Daviplata</option>
+              <option value="Efectivo">💵 Efectivo</option>
+            </select>
+          </div>
+          <div class="form-group form-col">
+            <label for="sub-category">Categoría</label>
+            <select id="sub-category" name="category" class="form-select">
+              <option value="Entertainment" selected>Entretenimiento</option>
+              <option value="Health & Wellness">Salud y Gimnasio</option>
+              <option value="Housing & Utilities">Servicios</option>
+              <option value="Other">Otro</option>
+            </select>
+          </div>
+        </div>
+
+        <div class="dialog-actions">
+          <button type="button" class="btn btn-secondary" id="btn-cancel-sub">Cancelar</button>
+          <button type="submit" class="btn btn-primary" id="btn-submit-sub">Guardar Suscripción</button>
         </div>
       </form>
     </div>

@@ -6,14 +6,14 @@ from datetime import datetime, time, timedelta, timezone
 from decimal import Decimal, InvalidOperation
 from typing import Any, Dict, List, Optional
 
-logger = logging.getLogger(__name__)
-
 from app.integrations.protocols import (
     IntentParserProtocol,
     IntentResult,
     IntentType,
     TransactionType,
 )
+
+logger = logging.getLogger(__name__)
 
 
 # Standard budget category mapping from keywords
@@ -71,6 +71,14 @@ CATEGORY_KEYWORD_MAP = {
         "sueldo", "salario", "nómina", "nomina", "honorarios", "quincena",
         "prima", "ingreso", "pago"
     ],
+}
+
+COLOMBIAN_ACCOUNTS = {
+    "efectivo": "Efectivo",
+    "nequi": "Nequi",
+    "nu": "Nu",
+    "daviplata": "Daviplata",
+    "bancolombia": "Bancolombia",
 }
 
 
@@ -185,6 +193,35 @@ class IntentParser(IntentParserProtocol):
         if calendar_schedule:
             return calendar_schedule
 
+        # 6b. Colombian Banking, Debts & Subscriptions (before standard finance entry)
+        acc_transfer = self._parse_account_transfer(cleaned, lower_text)
+        if acc_transfer:
+            return acc_transfer
+
+        debt_settle = self._parse_debt_settle(cleaned, lower_text)
+        if debt_settle:
+            return debt_settle
+
+        debt_record = self._parse_debt_record(cleaned, lower_text)
+        if debt_record:
+            return debt_record
+
+        debt_query = self._parse_debt_query(cleaned, lower_text)
+        if debt_query:
+            return debt_query
+
+        sub_record = self._parse_subscription_record(cleaned, lower_text)
+        if sub_record:
+            return sub_record
+
+        upcoming_query = self._parse_upcoming_payments_query(cleaned, lower_text)
+        if upcoming_query:
+            return upcoming_query
+
+        acc_query = self._parse_account_query(cleaned, lower_text)
+        if acc_query:
+            return acc_query
+
         # 7. Finance Entry (Expense or Income)
         finance_entry = self._parse_finance_entry(cleaned, lower_text)
         if finance_entry:
@@ -262,6 +299,7 @@ class IntentParser(IntentParserProtocol):
             "show my schedule", "what is on my schedule", "check schedule",
             "cuál es mi saldo", "cual es mi saldo", "mi saldo", "mis correos",
             "revisar correos", "mis tareas", "agendar", "buscar restaurantes",
+            "mis cuentas", "transferir", "mis deudas", "suscripciones", "vencimientos",
             "/start", "/help", "help", "ayuda"
         ]
         return any(ind in text for ind in switch_indicators)
@@ -350,6 +388,101 @@ class IntentParser(IntentParserProtocol):
                 due_date = self._extract_datetime(cleaned)
                 if due_date:
                     pending_slots["due_date"] = due_date
+
+            is_complete = len(missing_slots) == 0
+            return IntentResult(
+                intent=active_intent,
+                confidence=0.95,
+                slots=pending_slots,
+                is_complete=is_complete,
+                missing_slots=missing_slots,
+                raw_text=cleaned,
+            )
+
+        if active_intent == IntentType.ACCOUNT_TRANSFER:
+            amt = self._extract_amount_cents(cleaned)
+            if amt and "amount" in missing_slots:
+                pending_slots["amount_cents"] = amt
+                pending_slots["amount"] = amt / 100.0
+                missing_slots.remove("amount")
+
+            for acc_k, acc_name in COLOMBIAN_ACCOUNTS.items():
+                if acc_k in lower:
+                    if "from_account" in missing_slots and "to_account" not in missing_slots:
+                        pending_slots["from_account"] = acc_name
+                        pending_slots["source_account"] = acc_name
+                        missing_slots.remove("from_account")
+                    elif "to_account" in missing_slots:
+                        pending_slots["to_account"] = acc_name
+                        pending_slots["destination_account"] = acc_name
+                        missing_slots.remove("to_account")
+                    elif "from_account" in missing_slots:
+                        pending_slots["from_account"] = acc_name
+                        pending_slots["source_account"] = acc_name
+                        missing_slots.remove("from_account")
+
+            is_complete = len(missing_slots) == 0
+            return IntentResult(
+                intent=active_intent,
+                confidence=0.95,
+                slots=pending_slots,
+                is_complete=is_complete,
+                missing_slots=missing_slots,
+                raw_text=cleaned,
+            )
+
+        if active_intent == IntentType.DEBT_RECORD:
+            amt = self._extract_amount_cents(cleaned)
+            if amt and "amount" in missing_slots:
+                pending_slots["amount_cents"] = amt
+                pending_slots["amount"] = amt / 100.0
+                missing_slots.remove("amount")
+            if "counterparty" in missing_slots and not amt:
+                name_cand = cleaned.strip().split()[0].capitalize()
+                pending_slots["counterparty"] = name_cand
+                missing_slots.remove("counterparty")
+
+            is_complete = len(missing_slots) == 0
+            return IntentResult(
+                intent=active_intent,
+                confidence=0.95,
+                slots=pending_slots,
+                is_complete=is_complete,
+                missing_slots=missing_slots,
+                raw_text=cleaned,
+            )
+
+        if active_intent == IntentType.DEBT_SETTLE:
+            amt = self._extract_amount_cents(cleaned)
+            if amt and "amount" in missing_slots:
+                pending_slots["amount_cents"] = amt
+                pending_slots["amount"] = amt / 100.0
+                missing_slots.remove("amount")
+            if "counterparty" in missing_slots and not amt:
+                name_cand = cleaned.strip().split()[0].capitalize()
+                pending_slots["counterparty"] = name_cand
+                missing_slots.remove("counterparty")
+
+            is_complete = len(missing_slots) == 0
+            return IntentResult(
+                intent=active_intent,
+                confidence=0.95,
+                slots=pending_slots,
+                is_complete=is_complete,
+                missing_slots=missing_slots,
+                raw_text=cleaned,
+            )
+
+        if active_intent == IntentType.SUBSCRIPTION_RECORD:
+            amt = self._extract_amount_cents(cleaned)
+            if amt and "amount" in missing_slots:
+                pending_slots["amount_cents"] = amt
+                pending_slots["amount"] = amt / 100.0
+                missing_slots.remove("amount")
+            if "name" in missing_slots and not amt:
+                pending_slots["name"] = cleaned.strip().title()
+                pending_slots["service_name"] = pending_slots["name"]
+                missing_slots.remove("name")
 
             is_complete = len(missing_slots) == 0
             return IntentResult(
@@ -751,6 +884,446 @@ class IntentParser(IntentParserProtocol):
             raw_text=raw,
         )
 
+    # -------------------------------------------------------------------------
+    # Colombian Banking, Debt & Subscription Parser Methods (R1-R4)
+    # -------------------------------------------------------------------------
+
+    def _parse_account_transfer(self, raw: str, lower: str) -> Optional[IntentResult]:
+        """Detect and extract inter-account transfers (e.g. pasé 100 mil de Bancolombia a Nequi)."""
+        transfer_verb_match = re.search(
+            r"\b(pas[eé]|pasar|pasa|transfer[ií]|transferir|transfiere|mand[eé]|mandar|manda|retir[eé]|retirar|retira|saqu[eé]|sacar|saca|mover|mov[ií]|mueve|transferencia|traslad[eé]|traslado|trasladar)\b",
+            lower,
+        )
+        if not transfer_verb_match:
+            return None
+
+        has_acc = any(bool(re.search(rf"\b{acc}\b", lower)) for acc in COLOMBIAN_ACCOUNTS)
+        has_direction = bool(re.search(r"\b(?:de|desde)\b.+\b(?:a|hacia|en)\b", lower))
+        is_withdrawal = any(w in transfer_verb_match.group(1) for w in ("retir", "saqu", "saca"))
+
+        if not (has_acc or has_direction or is_withdrawal):
+            return None
+
+        # Exclude debt settlements: "le pagué ... a ..."
+        if re.search(r"\ble\s+pagu[eé]\b|\bme\s+pag[oó]\b|\bsald[eé]\b", lower):
+            return None
+
+        amount_cents = self._extract_amount_cents(raw)
+
+        from_acc = None
+        to_acc = None
+
+        from_match = re.search(r"\b(?:de|desde|from)\s+([a-záéíóú0-9_]+)", lower)
+        if from_match:
+            cand = from_match.group(1).strip()
+            if cand in COLOMBIAN_ACCOUNTS:
+                from_acc = COLOMBIAN_ACCOUNTS[cand]
+            elif cand not in ("mi", "mis", "un", "una", "el", "la"):
+                from_acc = cand.capitalize()
+
+        to_match = re.search(r"\b(?:a|hacia|para|to)\s+([a-záéíóú0-9_]+)", lower)
+        if to_match:
+            cand = to_match.group(1).strip()
+            if cand in COLOMBIAN_ACCOUNTS:
+                to_acc = COLOMBIAN_ACCOUNTS[cand]
+            elif cand not in ("mi", "mis", "un", "una", "el", "la", "pagar"):
+                to_acc = cand.capitalize()
+
+        if is_withdrawal and not to_acc:
+            to_acc = "Efectivo"
+
+        slots: Dict[str, Any] = {}
+        missing_slots: List[str] = []
+
+        if amount_cents is not None:
+            slots["amount_cents"] = amount_cents
+            slots["amount"] = amount_cents / 100.0
+        else:
+            missing_slots.append("amount")
+
+        if from_acc:
+            slots["from_account"] = from_acc
+            slots["source_account"] = from_acc
+        else:
+            missing_slots.append("from_account")
+
+        if to_acc:
+            slots["to_account"] = to_acc
+            slots["destination_account"] = to_acc
+        else:
+            missing_slots.append("to_account")
+
+        is_complete = len(missing_slots) == 0
+        confidence = 0.95 if is_complete else 0.80
+
+        return IntentResult(
+            intent=IntentType.ACCOUNT_TRANSFER,
+            confidence=confidence,
+            slots=slots,
+            is_complete=is_complete,
+            missing_slots=missing_slots,
+            raw_text=raw,
+        )
+
+    def _parse_debt_settle(self, raw: str, lower: str) -> Optional[IntentResult]:
+        """Detect and extract full or partial debt settlements (e.g. le pagué 20 mil a Juan)."""
+        settle_pats = [
+            r"\ble\s+pagu[eé]\s+(?:[\$0-9k\.\,\s]+(?:mil|k|pesos|millones)?\s+)?a\s+([A-ZÁÉÍÓÚa-záéíóú]+)",
+            r"\b([A-ZÁÉÍÓÚa-záéíóú]+)\s+(?:ya\s+)?me\s+pag[oó]",
+            r"\b(?:sald[eé]|saldar|liquidar|cancelar)\s+(?:la\s+)?deuda\s+(?:con|de)\s+([A-ZÁÉÍÓÚa-záéíóú]+)",
+            r"\bpagar\s+deuda\s+(?:a|de|con)\s+([A-ZÁÉÍÓÚa-záéíóú]+)",
+        ]
+
+        counterparty = None
+        for pat in settle_pats:
+            m = re.search(pat, raw, re.IGNORECASE)
+            if m:
+                cand = m.group(1).strip()
+                if cand.lower() not in ("un", "una", "el", "la", "los", "las", "mi", "mis", "deuda", "plata"):
+                    counterparty = cand.capitalize()
+                    break
+
+        if not counterparty:
+            m2 = re.search(r"\ble\s+pagu[eé]\s+a\s+([A-ZÁÉÍÓÚa-záéíóú]+)", raw, re.IGNORECASE)
+            if m2:
+                cand = m2.group(1).strip()
+                if cand.lower() not in ("un", "una", "el", "la"):
+                    counterparty = cand.capitalize()
+
+        if not counterparty:
+            return None
+
+        amount_cents = self._extract_amount_cents(raw)
+
+        account = None
+        for acc_k, acc_name in COLOMBIAN_ACCOUNTS.items():
+            if re.search(rf"\b(?:desde|en|por|con)\s+{acc_k}\b", lower):
+                account = acc_name
+                break
+
+        slots: Dict[str, Any] = {
+            "counterparty": counterparty,
+        }
+        if amount_cents is not None:
+            slots["amount_cents"] = amount_cents
+            slots["amount"] = amount_cents / 100.0
+        if account:
+            slots["account"] = account
+            slots["account_name"] = account
+
+        return IntentResult(
+            intent=IntentType.DEBT_SETTLE,
+            confidence=0.95,
+            slots=slots,
+            is_complete=True,
+            missing_slots=[],
+            raw_text=raw,
+        )
+
+    def _parse_debt_record(self, raw: str, lower: str) -> Optional[IntentResult]:
+        """Detect and extract debts and loans (e.g. le presté 50k a Juan, Juan me prestó 30 mil)."""
+        is_receivable = bool(
+            re.search(r"\b(le\s+prest[eé]|prest[eé]|prestar|prestamos|di\s+prestado|le\s+di\s+prestado)\b", lower)
+        )
+        is_debt = bool(
+            re.search(r"\b(me\s+prest[oó]|me\s+prestaron|le\s+debo|debo\b|deuda\s+con|pr[eé]stamo\s+de)\b", lower)
+        )
+
+        if not (is_receivable or is_debt):
+            return None
+
+        # Exclude questions like "a quién le debo?" -> DEBT_QUERY
+        if re.search(r"\b(qui[eé]n|cu[aá]nto|mis\s+deudas|deudas\s+pendientes)\b", lower):
+            return None
+
+        debt_type = "receivable" if is_receivable else "debt"
+        counterparty = None
+
+        if is_receivable:
+            m = re.search(r"\b(?:a|para)\s+([A-ZÁÉÍÓÚa-záéíóú]+)", raw)
+            if m:
+                cand = m.group(1).strip()
+                if cand.lower() not in (
+                    "un", "una", "el", "la", "los", "las", "mi", "mis",
+                    "nequi", "nu", "daviplata", "bancolombia", "efectivo"
+                ):
+                    counterparty = cand.capitalize()
+        else:
+            m1 = re.search(r"([A-ZÁÉÍÓÚa-záéíóú]+)\s+me\s+prest[oó]", raw, re.IGNORECASE)
+            if m1:
+                cand = m1.group(1).strip()
+                if cand.lower() not in ("ayer", "hoy", "ya", "él", "el", "ella"):
+                    counterparty = cand.capitalize()
+            if not counterparty:
+                m2 = re.search(
+                    r"\b(?:le\s+debo|debo)\s+(?:[\$0-9k\.\,\s]+(?:mil|k|pesos|millones)?\s+)?a\s+([A-ZÁÉÍÓÚa-záéíóú]+)",
+                    raw,
+                    re.IGNORECASE,
+                )
+                if m2:
+                    cand = m2.group(1).strip()
+                    if cand.lower() not in ("un", "una", "el", "la"):
+                        counterparty = cand.capitalize()
+            if not counterparty:
+                m3 = re.search(
+                    r"\bpr[eé]stamo\s+de\s+(?:[\$0-9k\.\,\s]+(?:mil|k|pesos|millones)?\s+)?(?:de\s+)?([A-ZÁÉÍÓÚa-záéíóú]+)",
+                    raw,
+                    re.IGNORECASE,
+                )
+                if m3:
+                    cand = m3.group(1).strip()
+                    if cand.lower() not in ("un", "una", "el", "la", "bancolombia", "nequi", "nu"):
+                        counterparty = cand.capitalize()
+
+        amount_cents = self._extract_amount_cents(raw)
+
+        account = None
+        for acc_k, acc_name in COLOMBIAN_ACCOUNTS.items():
+            if re.search(rf"\b(?:desde|de|en|por)\s+{acc_k}\b", lower):
+                account = acc_name
+                break
+
+        reason = "préstamo"
+        reason_match = re.search(
+            r"\b(?:para|por)\s+(?:el|la|los|las)?\s*([a-záéíóú0-9\s]+?)(?:,|\.|\s+me\s+paga|\s+paga|\s+desde|\s+en|\s+hasta|\s+para\s+el|$)",
+            lower,
+        )
+        if reason_match:
+            cand_reason = reason_match.group(1).strip()
+            clean_reason = re.sub(r"^(?:el|la|los|las)\s+", "", cand_reason).strip()
+            if clean_reason and clean_reason not in (
+                counterparty.lower() if counterparty else "",
+                "nequi", "nu", "bancolombia", "daviplata", "efectivo", "el"
+            ):
+                # Only assign as reason if it does not resolve as a date expression
+                if not self._extract_datetime(clean_reason):
+                    reason = clean_reason
+
+        due_date = None
+        # Explicit payment / deadline markers: "me paga (el)?", "paga (el)?", "vence (el)?", "hasta el"
+        due_match = re.search(
+            r"\b(?:me\s+paga|paga|vence|hasta\s+el)\s+(?:el\s+)?([a-záéíóú0-9\s]+?)(?:,|\.|$)",
+            lower,
+        )
+        if due_match:
+            due_str = due_match.group(1).strip()
+            resolved_dt = self._extract_datetime(due_str)
+            if resolved_dt:
+                due_date = resolved_dt.isoformat()
+            else:
+                due_date = due_str
+        else:
+            # Fallback: "para el <date>" or "para <date>" only if it resolves to a valid date
+            para_date_match = re.search(
+                r"\b(?:para\s+el|para)\s+([a-záéíóú0-9\s]+?)(?:,|\.|$)",
+                lower,
+            )
+            if para_date_match:
+                cand_due = para_date_match.group(1).strip()
+                resolved_dt = self._extract_datetime(cand_due)
+                if resolved_dt:
+                    due_date = resolved_dt.isoformat()
+
+        slots: Dict[str, Any] = {
+            "type": debt_type,
+            "debt_type": "payable" if debt_type == "debt" else debt_type,
+            "raw_debt_type": debt_type,
+            "reason": reason,
+            "notes": reason,
+        }
+        missing_slots: List[str] = []
+
+        if counterparty:
+            slots["counterparty"] = counterparty
+        else:
+            missing_slots.append("counterparty")
+
+        if amount_cents is not None:
+            slots["amount_cents"] = amount_cents
+            slots["amount"] = amount_cents / 100.0
+        else:
+            missing_slots.append("amount")
+
+        if account:
+            slots["account"] = account
+            slots["account_name"] = account
+
+        if due_date:
+            slots["due_date"] = due_date
+
+        is_complete = len(missing_slots) == 0
+        confidence = 0.95 if is_complete else 0.75
+
+        return IntentResult(
+            intent=IntentType.DEBT_RECORD,
+            confidence=confidence,
+            slots=slots,
+            is_complete=is_complete,
+            missing_slots=missing_slots,
+            raw_text=raw,
+        )
+
+    def _parse_debt_query(self, raw: str, lower: str) -> Optional[IntentResult]:
+        """Detect and extract queries for debts and loans."""
+        if not re.search(r"\b(deuda|deudas|debo|debe|deben|prestado|cobros|cobro)\b", lower):
+            return None
+
+        is_specific_debt = bool(
+            re.search(r"\b(a\s+qui[eé]n\s+le\s+debo|cu[aá]nto\s+debo|lo\s+que\s+debo|le\s+debo)\b", lower)
+        )
+        is_specific_rec = bool(
+            re.search(r"\b(qui[eé]n\s+me\s+debe|cu[aá]nto\s+me\s+deben|cobros\s+pendientes|quien\s+me\s+debe|lo\s+que\s+me\s+deben)\b", lower)
+        )
+
+        query_type = "all"
+        if is_specific_debt and not is_specific_rec:
+            query_type = "payable"
+        elif is_specific_rec and not is_specific_debt:
+            query_type = "receivable"
+
+        counterparty = None
+        m_cp = re.search(r"\b(?:debe|deuda\s+de)\s+([A-ZÁÉÍÓÚa-záéíóú]+)", raw)
+        if m_cp:
+            cand = m_cp.group(1).strip()
+            if cand.lower() not in ("plata", "dinero", "un", "una", "el", "la"):
+                counterparty = cand.capitalize()
+
+        return IntentResult(
+            intent=IntentType.DEBT_QUERY,
+            confidence=0.95,
+            slots={
+                "query_type": query_type,
+                "debt_type": query_type,
+                "counterparty": counterparty,
+            },
+            is_complete=True,
+            missing_slots=[],
+            raw_text=raw,
+        )
+
+    def _parse_subscription_record(self, raw: str, lower: str) -> Optional[IntentResult]:
+        """Detect and extract recurring subscription creations."""
+        if not re.search(r"\b(suscripci[oó]n|suscripciones|subscripci[oó]n|subscription)\b", lower):
+            return None
+
+        name = None
+        m_name = re.search(
+            r"\b(?:suscripci[oó]n|subscription)\s+(?:de|a)?\s*([A-Za-z0-9\+\.\s]+?)(?:\s+\d|\s+por\s+\d|\s+mensual|\s+los\s+\d|\s+desde|\s+en\s+nu|\s+en\s+bancolombia|$)",
+            raw,
+            re.IGNORECASE,
+        )
+        if m_name:
+            cand = m_name.group(1).strip()
+            if cand.lower() not in ("nueva", "un", "una", "el", "la", "mi"):
+                name = cand.title()
+
+        amount_cents = self._extract_amount_cents(raw)
+
+        billing_day = None
+        m_day = re.search(r"\b(?:los|el|d[ií]a)\s+([0-9]{1,2})\b", lower)
+        if m_day:
+            try:
+                day_num = int(m_day.group(1))
+                if 1 <= day_num <= 31:
+                    billing_day = day_num
+            except ValueError:
+                pass
+
+        if not billing_day:
+            billing_day = self.reference_time.day
+
+        account = None
+        for acc_k, acc_name in COLOMBIAN_ACCOUNTS.items():
+            if re.search(rf"\b(?:desde|en|por|con)\s+{acc_k}\b", lower):
+                account = acc_name
+                break
+
+        slots: Dict[str, Any] = {
+            "billing_cycle": "monthly",
+            "billing_day": billing_day,
+            "category": "Entertainment",
+        }
+        missing_slots: List[str] = []
+
+        if name:
+            slots["name"] = name
+            slots["service_name"] = name
+        else:
+            missing_slots.append("name")
+
+        if amount_cents is not None:
+            slots["amount_cents"] = amount_cents
+            slots["amount"] = amount_cents / 100.0
+        else:
+            missing_slots.append("amount")
+
+        if account:
+            slots["account"] = account
+            slots["account_name"] = account
+
+        is_complete = len(missing_slots) == 0
+        return IntentResult(
+            intent=IntentType.SUBSCRIPTION_RECORD,
+            confidence=0.95 if is_complete else 0.75,
+            slots=slots,
+            is_complete=is_complete,
+            missing_slots=missing_slots,
+            raw_text=raw,
+        )
+
+    def _parse_upcoming_payments_query(self, raw: str, lower: str) -> Optional[IntentResult]:
+        """Detect and extract queries for impending payments and subscriptions."""
+        pats = [
+            r"\b(pagos?\s+pendientes?|vencimientos?|pr[oó]ximos?\s+pagos?|calendario\s+de\s+pagos?)\b",
+            r"\bqu[eé]\s+(?:pagos\s+tengo\s+pendientes|tengo\s+que\s+pagar|vence\s+pronto|vencimientos)\b",
+            r"\bcu[aá]ndo\s+vencen?\b",
+        ]
+        if not any(re.search(pat, lower) for pat in pats):
+            return None
+
+        days_ahead = 7 if re.search(r"\b(esta\s+semana|semana)\b", lower) else 30
+
+        return IntentResult(
+            intent=IntentType.UPCOMING_PAYMENTS_QUERY,
+            confidence=0.95,
+            slots={"days_ahead": days_ahead},
+            is_complete=True,
+            missing_slots=[],
+            raw_text=raw,
+        )
+
+    def _parse_account_query(self, raw: str, lower: str) -> Optional[IntentResult]:
+        """Detect and extract account balance and net worth inquiries."""
+        has_known_bank = any(bool(re.search(rf"\b{k}\b", lower)) for k in COLOMBIAN_ACCOUNTS)
+        has_explicit_accounts = bool(re.search(r"\b(mis\s+cuentas|cuentas\s+bancarias|cuentas|patrimonio)\b", lower))
+
+        # Do not hijack general balance queries (e.g. 'cuál es mi saldo actual') unless specific bank or explicit accounts mentioned
+        if not (has_known_bank or has_explicit_accounts):
+            return None
+
+        if re.search(r"\b(gastos?|ingresos?|resumen|categor[ií]as?)\b", lower) and not has_known_bank:
+            return None
+
+        matched = []
+        for acc_k, acc_name in COLOMBIAN_ACCOUNTS.items():
+            if re.search(rf"\b{acc_k}\b", lower):
+                matched.append(acc_name)
+
+        all_accounts = len(matched) == 0 or "mis cuentas" in lower or "total" in lower or "patrimonio" in lower or "todas" in lower
+
+        return IntentResult(
+            intent=IntentType.ACCOUNT_QUERY,
+            confidence=0.95,
+            slots={
+                "account_names": matched,
+                "accounts": matched,
+                "all_accounts": all_accounts,
+            },
+            is_complete=True,
+            missing_slots=[],
+            raw_text=raw,
+        )
+
     def _parse_finance_entry(self, raw: str, lower: str) -> Optional[IntentResult]:
         """Detect and extract finance transactions (expense or income)."""
         # Exclude commands that are tasks or reminders
@@ -1029,8 +1602,8 @@ class IntentParser(IntentParserProtocol):
             except ValueError:
                 pass
 
-        # 2. Colombian colloquial: "X mil" or "Xk" (e.g. 50 mil -> 50,000; 25k -> 25,000)
-        m_mil = re.search(r"(\d+(?:[.,]\d+)?)\s*(?:mil|k)\b", text, re.IGNORECASE)
+        # 2. Colombian colloquial: "X mil", "Xk", or "X lucas" (e.g. 50 mil -> 50,000; 25k -> 25,000; 100 lucas -> 100,000)
+        m_mil = re.search(r"(\d+(?:[.,]\d+)?)\s*(?:mil|k|lucas)\b", text, re.IGNORECASE)
         if m_mil:
             try:
                 val = float(m_mil.group(1).replace(",", "."))
@@ -1069,6 +1642,16 @@ class IntentParser(IntentParserProtocol):
                         return int(round(dec * 100))
                 except (InvalidOperation, ValueError):
                     continue
+
+        # 5. Raw 4+ digit integers (e.g. "25000" in "transferir de Daviplata a Nequi 25000")
+        m_raw_num = re.search(r"\b(\d{4,9})\b", text)
+        if m_raw_num:
+            try:
+                val_int = int(m_raw_num.group(1))
+                if val_int >= 1000 and val_int not in range(2020, 2035):
+                    return val_int * 100
+            except ValueError:
+                pass
 
         plain_m = re.fullmatch(r"^\s*(\d+(?:\.\d{1,2})?)\s*$", text.strip())
         if plain_m:
@@ -1118,21 +1701,47 @@ class IntentParser(IntentParserProtocol):
         return "Other"
 
     def _extract_datetime(self, text: str) -> Optional[datetime]:
-        """Extract date and time from relative expressions."""
+        """Extract date and time from relative expressions and weekdays."""
         lower = text.lower()
         base_date = self.reference_time.date()
 
+        # 1. Check for explicit ISO format string
+        iso_m = re.search(r"\b(\d{4}-\d{2}-\d{2}(?:[T\s]\d{2}:\d{2}(?::\d{2})?)?)\b", text)
+        if iso_m:
+            try:
+                cleaned_iso = iso_m.group(1).replace(" ", "T")
+                return datetime.fromisoformat(cleaned_iso)
+            except ValueError:
+                pass
+
+        weekdays_map = {
+            "lunes": 0, "monday": 0,
+            "martes": 1, "tuesday": 1,
+            "miércoles": 2, "miercoles": 2, "wednesday": 2,
+            "jueves": 3, "thursday": 3,
+            "viernes": 4, "friday": 4,
+            "sábado": 5, "sabado": 5, "saturday": 5,
+            "domingo": 6, "sunday": 6,
+        }
+
+        target_date = None
+        has_relative_date = False
+
         if "tomorrow" in lower or "mañana" in lower or "manana" in lower:
             target_date = base_date + timedelta(days=1)
+            has_relative_date = True
         elif "today" in lower or "hoy" in lower:
             target_date = base_date
-        elif "next monday" in lower or "próximo lunes" in lower or "el lunes" in lower:
-            days_ahead = (0 - base_date.weekday() + 7) % 7 or 7
-            target_date = base_date + timedelta(days=days_ahead)
-        elif "friday" in lower or "viernes" in lower:
-            days_ahead = (4 - base_date.weekday() + 7) % 7 or 7
-            target_date = base_date + timedelta(days=days_ahead)
+            has_relative_date = True
         else:
+            for day_name, day_num in weekdays_map.items():
+                if re.search(rf"\b{day_name}\b", lower):
+                    days_ahead = (day_num - base_date.weekday() + 7) % 7 or 7
+                    target_date = base_date + timedelta(days=days_ahead)
+                    has_relative_date = True
+                    break
+
+        if target_date is None:
             target_date = base_date
 
         delta_m = re.search(r"\b(?:in|en)\s+(\d+)\s*(hours?|horas?|minutes?|minutos?|mins?)\b", lower)
@@ -1158,7 +1767,7 @@ class IntentParser(IntentParserProtocol):
             if 0 <= hour <= 23 and 0 <= minute <= 59:
                 return datetime.combine(target_date, time(hour=hour, minute=minute))
 
-        if "tomorrow" in lower or "mañana" in lower or "manana" in lower:
+        if has_relative_date:
             return datetime.combine(target_date, time(hour=9, minute=0))
 
         return None

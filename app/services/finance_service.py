@@ -11,7 +11,6 @@ from app.database.repositories.finance_repo import (
     FinanceRepository,
     TransactionRecord,
     TransactionType,
-    parse_datetime,
 )
 
 # Standard taxonomy categories
@@ -73,9 +72,16 @@ class FinanceService:
         repository: Optional[FinanceRepository] = None,
         db_manager: Optional[DatabaseManager] = None,
         high_value_threshold_cents: int = 50000,  # $500.00
+        account_service: Optional[Any] = None,
     ):
-        self.repo = repository or FinanceRepository(db_manager or get_default_manager())
+        self.db_mgr = db_manager or get_default_manager()
+        self.repo = repository or FinanceRepository(self.db_mgr)
         self.high_value_threshold_cents = high_value_threshold_cents
+        if account_service is not None:
+            self.account_service = account_service
+        else:
+            from app.services.account_service import AccountService
+            self.account_service = AccountService(db_manager=self.db_mgr)
 
     def record_transaction(
         self,
@@ -89,6 +95,8 @@ class FinanceService:
         transaction_type: Optional[Union[TransactionType, str]] = None,
         timestamp: Optional[Union[datetime, str]] = None,
         idempotency_key: Optional[str] = None,
+        account_name: Optional[str] = None,
+        account_id: Optional[str] = None,
     ) -> TransactionRecord:
         """Record an income or expense transaction with strict validation and zero floating-point drift.
 
@@ -169,7 +177,25 @@ class FinanceService:
         if timestamp is not None:
             iso_timestamp = validate_iso_date(timestamp)
 
-        # 6. Persist through repository with integer cents
+        # 6. Resolve target account and adjust balance if account is specified
+        target_account = None
+        if account_name or account_id:
+            clean_uid = user_id.strip()
+            self.account_service.ensure_default_accounts(clean_uid)
+            if account_id:
+                target_account = self.account_service.get_account(account_id)
+            if not target_account and account_name:
+                target_account = self.account_service.get_account_by_name(clean_uid, account_name.strip())
+                if not target_account:
+                    target_account = self.account_service.create_account(clean_uid, account_name.strip())
+
+            if target_account:
+                if resolved_type == TransactionType.INCOME:
+                    self.account_service.adjust_balance(target_account.id, cents)
+                elif resolved_type == TransactionType.EXPENSE:
+                    self.account_service.adjust_balance(target_account.id, -cents)
+
+        # 7. Persist through repository with integer cents
         return self.repo.add_transaction(
             user_id=user_id.strip(),
             amount_cents=cents,
@@ -178,6 +204,8 @@ class FinanceService:
             description=clean_description,
             timestamp=iso_timestamp,
             idempotency_key=idempotency_key.strip() if idempotency_key else None,
+            account_id=target_account.id if target_account else None,
+            account_name=target_account.name if target_account else None,
         )
 
     def get_balance(self, user_id: str) -> Dict[str, Any]:
@@ -358,7 +386,6 @@ class FinanceService:
                 alerts.append(f"Budget warning: {cat} spending is at {pct:.1f}% ({spent_str} of {limit_str} limit)")
 
         # 2. Check for single high-value transactions in the active period
-        pattern = f"{active_period}%"
         recent_txs = self.repo.list_transactions(user_id=user_id.strip(), limit=50)
         for tx in recent_txs:
             if tx.transaction_type == TransactionType.EXPENSE and tx.amount_cents >= self.high_value_threshold_cents:

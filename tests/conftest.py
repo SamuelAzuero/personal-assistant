@@ -173,6 +173,82 @@ def mock_db() -> Generator[sqlite3.Connection, None, None]:
                 processed_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                 FOREIGN KEY (user_id) REFERENCES users(user_id) ON DELETE CASCADE
             );
+            CREATE TABLE IF NOT EXISTS accounts (
+                account_id TEXT PRIMARY KEY,
+                user_id TEXT NOT NULL,
+                name TEXT NOT NULL,
+                account_type TEXT NOT NULL DEFAULT 'digital_wallet',
+                balance_cents INTEGER NOT NULL DEFAULT 0,
+                currency TEXT NOT NULL DEFAULT 'COP',
+                color TEXT,
+                icon TEXT,
+                is_active BOOLEAN NOT NULL DEFAULT 1,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                UNIQUE(user_id, name),
+                FOREIGN KEY (user_id) REFERENCES users(user_id) ON DELETE CASCADE
+            );
+            CREATE TABLE IF NOT EXISTS transfers (
+                transfer_id TEXT PRIMARY KEY,
+                user_id TEXT NOT NULL,
+                from_account_id TEXT NOT NULL,
+                to_account_id TEXT NOT NULL,
+                from_account_name TEXT,
+                to_account_name TEXT,
+                amount_cents INTEGER NOT NULL CHECK (amount_cents > 0),
+                fee_cents INTEGER NOT NULL DEFAULT 0 CHECK (fee_cents >= 0),
+                description TEXT,
+                timestamp TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                FOREIGN KEY (user_id) REFERENCES users(user_id) ON DELETE CASCADE
+            );
+            CREATE TABLE IF NOT EXISTS debts (
+                debt_id TEXT PRIMARY KEY,
+                user_id TEXT NOT NULL,
+                debt_type TEXT NOT NULL CHECK (debt_type IN ('debt', 'receivable')),
+                counterparty TEXT NOT NULL,
+                amount_cents INTEGER NOT NULL CHECK (amount_cents > 0),
+                remaining_cents INTEGER NOT NULL CHECK (remaining_cents >= 0),
+                reason TEXT NOT NULL,
+                due_date TIMESTAMP,
+                status TEXT NOT NULL DEFAULT 'active' CHECK (status IN ('active', 'partially_paid', 'settled', 'cancelled')),
+                account_id TEXT,
+                account_name TEXT,
+                paid_amount_cents INTEGER NOT NULL DEFAULT 0 CHECK (paid_amount_cents >= 0),
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                settled_at TIMESTAMP,
+                FOREIGN KEY (user_id) REFERENCES users(user_id) ON DELETE CASCADE
+            );
+            CREATE TABLE IF NOT EXISTS debt_payments (
+                payment_id TEXT PRIMARY KEY,
+                debt_id TEXT NOT NULL,
+                user_id TEXT NOT NULL,
+                amount_cents INTEGER NOT NULL CHECK (amount_cents > 0),
+                account_id TEXT,
+                account_name TEXT,
+                notes TEXT,
+                payment_date TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                FOREIGN KEY (debt_id) REFERENCES debts(debt_id) ON DELETE CASCADE
+            );
+            CREATE TABLE IF NOT EXISTS subscriptions (
+                subscription_id TEXT PRIMARY KEY,
+                user_id TEXT NOT NULL,
+                name TEXT NOT NULL,
+                amount_cents INTEGER NOT NULL CHECK (amount_cents > 0),
+                billing_cycle TEXT NOT NULL DEFAULT 'monthly' CHECK (billing_cycle IN ('weekly', 'monthly', 'quarterly', 'semiannual', 'annual', 'yearly')),
+                billing_day INTEGER CHECK (billing_day BETWEEN 1 AND 31),
+                next_payment_date DATE NOT NULL,
+                account_id TEXT,
+                account_name TEXT,
+                category TEXT DEFAULT 'Entertainment',
+                status TEXT NOT NULL DEFAULT 'active' CHECK (status IN ('active', 'paused', 'cancelled')),
+                reminder_days_before INTEGER DEFAULT 3,
+                notes TEXT,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                FOREIGN KEY (user_id) REFERENCES users(user_id) ON DELETE CASCADE
+            );
         """)
 
     # Seed default test user
@@ -180,6 +256,8 @@ def mock_db() -> Generator[sqlite3.Connection, None, None]:
         "INSERT OR IGNORE INTO users (user_id, telegram_chat_id, full_name) VALUES (?, ?, ?)",
         ("usr_test_default", "998877", "Test User"),
     )
+    from app.database.connection import seed_default_accounts_for_user
+    seed_default_accounts_for_user(conn, "usr_test_default")
     conn.commit()
 
     try:

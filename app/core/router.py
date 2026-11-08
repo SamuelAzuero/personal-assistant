@@ -27,6 +27,9 @@ class ToolRouter:
         task_service: Optional[TaskServiceProtocol] = None,
         search_service: Optional[SearchServiceProtocol] = None,
         gemini_service: Optional[Any] = None,
+        account_service: Optional[Any] = None,
+        debt_service: Optional[Any] = None,
+        subscription_service: Optional[Any] = None,
     ) -> None:
         self.finance_service = finance_service
         self.email_service = email_service
@@ -34,6 +37,9 @@ class ToolRouter:
         self.task_service = task_service
         self.search_service = search_service
         self.gemini_service = gemini_service
+        self.account_service = account_service
+        self.debt_service = debt_service
+        self.subscription_service = subscription_service
 
     @property
     def effective_gemini_service(self) -> Optional[Any]:
@@ -46,6 +52,33 @@ class ToolRouter:
             return self.gemini_service
         except Exception:
             return None
+
+    @property
+    def effective_account_service(self) -> Any:
+        """Lazy load or return AccountService instance."""
+        if self.account_service is not None:
+            return self.account_service
+        from app.services.account_service import AccountService
+        self.account_service = AccountService()
+        return self.account_service
+
+    @property
+    def effective_debt_service(self) -> Any:
+        """Lazy load or return DebtService instance."""
+        if self.debt_service is not None:
+            return self.debt_service
+        from app.services.debt_service import DebtService
+        self.debt_service = DebtService(account_service=self.effective_account_service)
+        return self.debt_service
+
+    @property
+    def effective_subscription_service(self) -> Any:
+        """Lazy load or return SubscriptionService instance."""
+        if self.subscription_service is not None:
+            return self.subscription_service
+        from app.services.subscription_service import SubscriptionService
+        self.subscription_service = SubscriptionService()
+        return self.subscription_service
 
     def _is_spanish(self, text: str) -> bool:
         """Detect if input contains Spanish vocabulary."""
@@ -68,7 +101,8 @@ class ToolRouter:
             "planes", "salir", "restaurante", "comer", "sitios", "café", "ocio",
             "cancelar", "cancela", "elimina", "eliminar", "borra", "borrar", "quitar", "quítale", "quitale", "quítame", "quitame", "salir", "ayuda", "hola", "mil", "pesos", "cop", "millones",
             "hoy", "mañana", "manana", "mes", "semana", "buseta", "flota", "pasaje", "pasajes",
-            "buenos", "buen", "días", "dias", "día", "dia", "hice", "terminé", "termine", "completé", "complete", "hecha", "hecho", "consejo", "financiero", "financiera", "consejos", "puedo"
+            "buenos", "buen", "días", "dias", "día", "dia", "hice", "terminé", "termine", "completé", "complete", "hecha", "hecho", "consejo", "financiero", "financiera", "consejos", "puedo",
+            "presté", "preste", "prestó", "presto", "prestado", "debo", "deuda", "deudas", "suscripción", "suscripcion", "suscripciones", "transferencia", "transferí", "transferi", "retiré", "retire", "nequi", "daviplata", "bancolombia", "vencimientos", "cobros"
         ]
         return any(re.search(rf"\b{re.escape(w)}\b", lower) for w in spanish_keywords)
 
@@ -95,6 +129,13 @@ class ToolRouter:
             IntentType.TASK_DELETE: self._handle_task_delete,
             IntentType.DAILY_BRIEFING: self._handle_daily_briefing,
             IntentType.OUTING_RESEARCH: self._handle_outing_research,
+            IntentType.ACCOUNT_TRANSFER: self._handle_account_transfer,
+            IntentType.ACCOUNT_QUERY: self._handle_account_query,
+            IntentType.DEBT_RECORD: self._handle_debt_record,
+            IntentType.DEBT_SETTLE: self._handle_debt_settle,
+            IntentType.DEBT_QUERY: self._handle_debt_query,
+            IntentType.SUBSCRIPTION_RECORD: self._handle_subscription_record,
+            IntentType.UPCOMING_PAYMENTS_QUERY: self._handle_upcoming_payments_query,
             IntentType.CANCEL: self._handle_cancel,
             IntentType.UNKNOWN: self._handle_unknown,
         }
@@ -616,7 +657,7 @@ class ToolRouter:
         if is_spanish:
             lines = [
                 f"🌅 **Resumen del Día — {fecha_str} ({hora_str})**",
-                f"👋 ¡Hola Samuel! Aquí está el panorama para hoy:\n",
+                "👋 ¡Hola Samuel! Aquí está el panorama para hoy:\n",
                 f"📋 **Tareas Pendientes ({len(pending_tasks)}):**",
             ]
             if pending_tasks:
@@ -634,7 +675,7 @@ class ToolRouter:
             else:
                 lines.append("  • Bandejas al día.")
 
-            lines.append(f"\n💰 **Finanzas del Mes (COP):**")
+            lines.append("\n💰 **Finanzas del Mes (COP):**")
             lines.append(f"  • Saldo Neto: `${net:,.2f} COP` | Gastos: `${exp:,.2f} COP`")
             lines.append("\n💪 ¡Que tengas una jornada muy productiva!")
             return "\n".join(lines)
@@ -659,7 +700,7 @@ class ToolRouter:
 
         gemini_svc = self.effective_gemini_service
         if gemini_svc and gemini_svc.is_available() and is_spanish:
-            categories_text = ", ".join([f"{item.get('category')}: ${item.get('total_cents', 0)/100:,.0f} COP ({item.get('percentage', 0):.1f}%)" for item in breakdown]) or "Sin gastos registrados"
+            categories_text = ", ".join([f"{item.get('category')}: ${item.get('total_cents', 0) / 100:,.0f} COP ({item.get('percentage', 0):.1f}%)" for item in breakdown]) or "Sin gastos registrados"
             prompt = (
                 f"Eres el asesor financiero personal de Samuel Azuero en Colombia. "
                 f"Moneda exclusiva: Pesos Colombianos (COP). No menciones dólares.\n"
@@ -690,7 +731,7 @@ class ToolRouter:
             ]
             if breakdown:
                 top = breakdown[0]
-                lines.append(f"📌 **Categoría con mayor gasto:** {top.get('category')} con `${top.get('total_cents', 0)/100:,.2f} COP` ({top.get('percentage', 0):.1f}% del total).")
+                lines.append(f"📌 **Categoría con mayor gasto:** {top.get('category')} con `${top.get('total_cents', 0) / 100:,.2f} COP` ({top.get('percentage', 0):.1f}% del total).")
             lines.append("\n🎯 **Recomendación:** Mantén un fondo de reserva para imprevistos y registra cada gasto diario para no perder el control del presupuesto.")
             return "\n".join(lines)
 
@@ -824,3 +865,302 @@ class ToolRouter:
             "• **Planes / Outings:** `Buscar planes para salir en Bogotá`, `Find good Italian restaurants nearby`\n\n"
             "Puedes escribir `/cancel` o `/cancelar` en cualquier momento para anular un comando activo."
         )
+
+    # -------------------------------------------------------------------------
+    # Colombian Banking, Debt & Subscription Handlers (R1-R4)
+    # -------------------------------------------------------------------------
+
+    def _handle_account_transfer(
+        self, user_id: str, slots: Dict[str, Any], is_spanish: bool = False
+    ) -> str:
+        """Handle inter-account fund transfers."""
+        svc = self.effective_account_service
+        from_acc = slots.get("from_account") or slots.get("source_account")
+        to_acc = slots.get("to_account") or slots.get("destination_account")
+        amount_cents = slots.get("amount_cents")
+        if amount_cents is None and "amount" in slots:
+            amount_cents = int(round(float(slots["amount"]) * 100))
+        if amount_cents is None:
+            amount_cents = 0
+        note = slots.get("note") or slots.get("notes") or ""
+
+        try:
+            svc.transfer(
+                user_id=user_id,
+                from_account_name_or_id=from_acc,
+                to_account_name_or_id=to_acc,
+                amount_cents=amount_cents,
+                description=note,
+            )
+            net_worth = svc.get_net_worth(user_id)
+            total_nw = net_worth.get("total_net_worth", 0)
+
+            from_record = svc.get_account_by_name(user_id, from_acc)
+            to_record = svc.get_account_by_name(user_id, to_acc)
+            from_bal = f"${from_record.balance:,.0f} COP" if from_record else ""
+            to_bal = f"${to_record.balance:,.0f} COP" if to_record else ""
+
+            amount_fmt = f"${amount_cents / 100:,.0f} COP"
+            total_fmt = f"${total_nw:,.0f} COP"
+
+            return (
+                f"💸 **Transferencia Exitosa**\n\n"
+                f"• Origen: **{from_acc}** ({from_bal})\n"
+                f"• Destino: **{to_acc}** ({to_bal})\n"
+                f"• Monto transferido: **{amount_fmt}**\n\n"
+                f"💰 **Patrimonio Neto Total**: **{total_fmt}** (sin pérdida de valor)"
+            )
+        except Exception as e:
+            return f"❌ Error al realizar la transferencia: {str(e)}"
+
+    def _handle_account_query(
+        self, user_id: str, slots: Dict[str, Any], is_spanish: bool = False
+    ) -> str:
+        """Handle balance and net worth inquiries."""
+        svc = self.effective_account_service
+        svc.ensure_default_accounts(user_id)
+        account_names = slots.get("account_names") or slots.get("accounts") or []
+        all_accounts = slots.get("all_accounts", len(account_names) == 0)
+
+        accounts = svc.get_accounts(user_id, active_only=True)
+        if not all_accounts and account_names:
+            target_lower = [name.lower() for name in account_names]
+            filtered = [a for a in accounts if a.name.lower() in target_lower]
+            if filtered:
+                accounts = filtered
+
+        net_worth = svc.get_net_worth(user_id)
+        total_nw = net_worth.get("total_net_worth", 0)
+
+        icon_map = {
+            "efectivo": "💵",
+            "nequi": "📱",
+            "nu": "🟣",
+            "daviplata": "🔴",
+            "bancolombia": "🟡",
+        }
+
+        lines = ["🏦 💼 **Saldos de tus Cuentas:**\n"]
+        for a in accounts:
+            icon = icon_map.get(a.name.lower(), "💳")
+            bal_fmt = f"${a.balance:,.0f} COP"
+            lines.append(f"• {icon} **{a.name}**: {bal_fmt}")
+
+        lines.append(f"\n💰 **Patrimonio Neto Total**: **${total_nw:,.0f} COP**")
+        return "\n".join(lines)
+
+    def _handle_debt_record(
+        self, user_id: str, slots: Dict[str, Any], is_spanish: bool = False
+    ) -> str:
+        """Handle debt and loan recordings."""
+        svc = self.effective_debt_service
+        counterparty = slots.get("counterparty")
+        amount_cents = slots.get("amount_cents")
+        if amount_cents is None and "amount" in slots:
+            amount_cents = int(round(float(slots["amount"]) * 100))
+        if amount_cents is None:
+            amount_cents = 0
+        debt_type = slots.get("debt_type") or slots.get("type", "receivable")
+        if debt_type == "payable":
+            debt_type = "debt"
+        reason = slots.get("reason") or slots.get("notes") or "préstamo"
+        due_date = slots.get("due_date")
+        account_name = slots.get("account") or slots.get("account_name", "Efectivo")
+
+        try:
+            record = svc.record_debt(
+                user_id=user_id,
+                counterparty=counterparty,
+                amount_cents=amount_cents,
+                debt_type=debt_type,
+                reason=reason,
+                due_date=due_date,
+                account_name=account_name,
+            )
+
+            amount_fmt = f"${amount_cents / 100:,.0f} COP"
+            if record.due_date:
+                due_str = record.due_date.strftime("%Y-%m-%d") if hasattr(record.due_date, "strftime") else str(record.due_date)[:10]
+            else:
+                due_str = "Sin fecha límite"
+
+            if record.debt_type.value == "receivable":
+                return (
+                    f"🤝 **Préstamo Registrado (Por Cobrar)**\n\n"
+                    f"• Deudor: **{record.counterparty}**\n"
+                    f"• Monto prestado: **{amount_fmt}**\n"
+                    f"• Cuenta de desembolso: **{record.account_name}**\n"
+                    f"• Concepto: {record.reason}\n"
+                    f"• Fecha estimada de cobro: **{due_str}**\n"
+                    f"• Estado: **Activo**"
+                )
+            else:
+                return (
+                    f"📝 **Deuda Registrada (Por Pagar)**\n\n"
+                    f"• Prestamista: **{record.counterparty}**\n"
+                    f"• Monto recibido: **{amount_fmt}**\n"
+                    f"• Cuenta de abono: **{record.account_name}**\n"
+                    f"• Concepto: {record.reason}\n"
+                    f"• Fecha límite de pago: **{due_str}**\n"
+                    f"• Estado: **Activo**"
+                )
+        except Exception as e:
+            return f"❌ Error al registrar el crédito/deuda: {str(e)}"
+
+    def _handle_debt_settle(
+        self, user_id: str, slots: Dict[str, Any], is_spanish: bool = False
+    ) -> str:
+        """Handle full or partial debt settlements."""
+        svc = self.effective_debt_service
+        counterparty = slots.get("counterparty")
+        amount_cents = slots.get("amount_cents")
+        if amount_cents is None and "amount" in slots:
+            amount_cents = int(round(float(slots["amount"]) * 100))
+        account_name = slots.get("account") or slots.get("account_name")
+
+        debts = svc.list_debts(user_id=user_id, counterparty=counterparty)
+        active_debts = [d for d in debts if d.status.value in ("active", "partially_paid")]
+
+        if not active_debts:
+            return f"ℹ️ No se encontraron deudas activas con **{counterparty}**."
+
+        target_debt = active_debts[0]
+
+        try:
+            if amount_cents and amount_cents < target_debt.remaining_cents:
+                res = svc.record_payment(
+                    user_id=user_id,
+                    debt_id=target_debt.id,
+                    amount_cents=amount_cents,
+                    account_name=account_name,
+                )
+                paid_fmt = f"${amount_cents / 100:,.0f} COP"
+                rem_fmt = f"${res['debt']['remaining_cents'] / 100:,.0f} COP"
+                return (
+                    f"✅ **Abono Parcial Registrado**\n\n"
+                    f"• Contraparte: **{target_debt.counterparty}**\n"
+                    f"• Monto abonado: **{paid_fmt}**\n"
+                    f"• Saldo restante: **{rem_fmt}**\n"
+                    f"• Estado: **Parcialmente pagado**"
+                )
+            else:
+                res = svc.settle_debt(
+                    user_id=user_id,
+                    debt_id=target_debt.id,
+                    account_name=account_name,
+                )
+                paid_fmt = f"${target_debt.remaining_cents / 100:,.0f} COP"
+                return (
+                    f"✅ 🎉 **Deuda Totalmente Saldada**\n\n"
+                    f"• Contraparte: **{target_debt.counterparty}**\n"
+                    f"• Monto liquidado: **{paid_fmt}**\n"
+                    f"• Saldo restante: **$0 COP**\n"
+                    f"• Estado: **Liquidada / Settled**"
+                )
+        except Exception as e:
+            return f"❌ Error al liquidar la deuda: {str(e)}"
+
+    def _handle_debt_query(
+        self, user_id: str, slots: Dict[str, Any], is_spanish: bool = False
+    ) -> str:
+        """Handle queries for debts and receivables."""
+        svc = self.effective_debt_service
+        query_type = slots.get("query_type", "all")
+        counterparty = slots.get("counterparty")
+
+        debts = svc.list_debts(user_id=user_id, counterparty=counterparty)
+        active_debts = [d for d in debts if d.status.value in ("active", "partially_paid")]
+
+        if not active_debts:
+            return "🎉 ¡Excelente! No tienes deudas ni cobros pendientes."
+
+        receivables = [d for d in active_debts if d.debt_type.value == "receivable"]
+        payables = [d for d in active_debts if d.debt_type.value == "debt"]
+
+        lines = ["📋 **Estado de Deudas y Cobros:**\n"]
+
+        if query_type in ("all", "receivable") and receivables:
+            total_rec = sum(d.remaining_cents for d in receivables)
+            lines.append(f"📌 **Por Cobrar (Te deben):** Total: **${total_rec / 100:,.0f} COP**")
+            for r in receivables:
+                r_due = r.due_date.strftime("%Y-%m-%d") if hasattr(r.due_date, "strftime") else str(r.due_date)[:10]
+                due = f" (vence {r_due})" if r.due_date else ""
+                lines.append(f"  • **{r.counterparty}**: ${r.remaining_amount:,.0f} COP — _{r.reason}_{due}")
+            lines.append("")
+
+        if query_type in ("all", "debt", "payable") and payables:
+            total_pay = sum(d.remaining_cents for d in payables)
+            lines.append(f"💳 **Por Pagar (Debes):** Total: **${total_pay / 100:,.0f} COP**")
+            for p in payables:
+                p_due = p.due_date.strftime("%Y-%m-%d") if hasattr(p.due_date, "strftime") else str(p.due_date)[:10]
+                due = f" (vence {p_due})" if p.due_date else ""
+                lines.append(f"  • **{p.counterparty}**: ${p.remaining_amount:,.0f} COP — _{p.reason}_{due}")
+            lines.append("")
+
+        return "\n".join(lines).strip()
+
+    def _handle_subscription_record(
+        self, user_id: str, slots: Dict[str, Any], is_spanish: bool = False
+    ) -> str:
+        """Handle recurring subscription additions."""
+        svc = self.effective_subscription_service
+        name = slots.get("name") or slots.get("service_name", "Suscripción")
+        amount_cents = slots.get("amount_cents")
+        if amount_cents is None and "amount" in slots:
+            amount_cents = int(round(float(slots["amount"]) * 100))
+        if amount_cents is None:
+            amount_cents = 0
+        billing_cycle = slots.get("billing_cycle", "monthly")
+        billing_day = slots.get("billing_day", 1)
+        account = slots.get("account") or slots.get("account_name")
+        category = slots.get("category", "Entertainment")
+
+        try:
+            record = svc.create_subscription(
+                user_id=user_id,
+                name=name,
+                amount_cents=amount_cents,
+                billing_cycle=billing_cycle,
+                billing_day=billing_day,
+                account_name=account,
+                category=category,
+            )
+            cost_fmt = f"${record.amount:,.0f} COP"
+            return (
+                f"🔁 **Suscripción Registrada**\n\n"
+                f"• Servicio: **{record.name}**\n"
+                f"• Costo: **{cost_fmt}** / {record.billing_cycle}\n"
+                f"• Día de cobro: **{record.renewal_day}** de cada mes\n"
+                f"• Cuenta predeterminada: **{record.account_name or 'Nu'}**\n"
+                f"• Próxima renovación: **{record.next_payment_date}**"
+            )
+        except Exception as e:
+            return f"❌ Error al registrar la suscripción: {str(e)}"
+
+    def _handle_upcoming_payments_query(
+        self, user_id: str, slots: Dict[str, Any], is_spanish: bool = False
+    ) -> str:
+        """Handle chronological upcoming payments schedule queries."""
+        svc = self.effective_subscription_service
+        days_ahead = slots.get("days_ahead", 30)
+
+        payments = svc.get_upcoming_payments(user_id=user_id, days_ahead=days_ahead)
+        if not payments:
+            return f"📅 No tienes compromisos ni pagos pendientes en los próximos {days_ahead} días."
+
+        urgency_icons = {
+            "overdue": "🚨",
+            "today": "⚠️",
+            "soon": "🔔",
+            "upcoming": "🗓️",
+        }
+
+        lines = [f"📅 **Próximos Pagos y Vencimientos ({days_ahead} días):**\n"]
+        for p in payments:
+            icon = urgency_icons.get(p.get("urgency", "upcoming"), "🗓️")
+            amt_fmt = f"${p['amount']:,.0f} COP"
+            due = p["due_date"][:10]
+            tag = "Cobro" if p.get("direction") == "inflow" else "Pago"
+            lines.append(f"• {icon} **{due}** — {p['title']}: **{amt_fmt}** ({tag})")
+
+        return "\n".join(lines)

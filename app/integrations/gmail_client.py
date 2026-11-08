@@ -57,7 +57,6 @@ class GmailClient:
         account_candidates: List[tuple[str, str]] = []
 
         primary_pw = settings.gmail_app_password
-        secondary_pw = settings.secondary_gmail_app_password or (primary_pw if not settings.gmail_user_email else None)
 
         if target_account and "@" in target_account:
             if target_account == settings.gmail_user_email and primary_pw:
