@@ -47,10 +47,10 @@ class Settings(BaseSettings):
     google_client_secret: Optional[str] = Field(default=None, description="Google OAuth 2.0 Client Secret")
     google_refresh_token: Optional[str] = Field(default=None, description="Google OAuth refresh token")
     gmail_user_email: Optional[str] = Field(
-        default="user@example.com", description="Primary monitored Gmail address"
+        default=None, description="Primary monitored Gmail address"
     )
     secondary_gmail_user_email: Optional[str] = Field(
-        default="est.samuel.azuero@unimilitar.edu.co", description="Secondary institutional monitored Gmail address"
+        default=None, description="Secondary institutional monitored Gmail address"
     )
     gmail_app_password: Optional[str] = Field(default=None, description="Google App Password (16 characters) for IMAP access")
     secondary_gmail_app_password: Optional[str] = Field(

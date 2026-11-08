@@ -49,8 +49,8 @@ def mock_email_service():
         'urgent_count': 1,
         'total_unread': 2,
         'items': [
-            {'subject': 'Urgente: Entrega de Tópicos', 'sender': 'profesor@unimilitar.edu.co', 'is_urgent': True, 'account': 'est.samuel.azuero@unimilitar.edu.co'},
-            {'subject': 'Factura Claro', 'sender': 'pagos@claro.com.co', 'is_urgent': False, 'account': 'user@example.com'},
+            {'subject': 'Urgente: Entrega de Tópicos', 'sender': 'profesor@unimilitar.edu.co', 'is_urgent': True, 'account': 'student@unimilitar.edu.co'},
+            {'subject': 'Factura Claro', 'sender': 'pagos@claro.com.co', 'is_urgent': False, 'account': 'personal.user@example.com'},
         ],
         'summary_text': 'Resumen de correos de prueba',
         'gemini_summary': '• Tienes 1 entrega urgente del profesor para Tópicos.',

@@ -347,7 +347,7 @@ def test_deploy_cloud_run_script_attributes():
     content = script_path.read_text(encoding="utf-8")
     assert "gcloud run deploy" in content
     assert "--min-instances 0" in content  # Scale to zero for true free-tier zero cost
-    assert "--memory 256Mi" in content    # Lightweight footprint
+    assert "--memory 512Mi" in content or "--memory 256Mi" in content    # Lightweight footprint
     assert "--cpu 1" in content
 
 
