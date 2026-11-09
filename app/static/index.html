@@ -9,6 +9,13 @@
   <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 </head>
 <body>
+  <!-- Aviso de accesibilidad si JavaScript está deshabilitado -->
+  <noscript>
+    <div style="background-color: #ef4444; color: #ffffff; padding: 0.75rem 1rem; text-align: center; font-weight: 600; font-size: 0.95rem;">
+      ⚠️ JavaScript está inhabilitado en su navegador. El panel y los diálogos modales interactivos requieren JavaScript para el registro y sincronización de transacciones en tiempo real.
+    </div>
+  </noscript>
+
   <!-- Barra de Navegación Superior -->
   <header class="navbar">
     <div class="nav-brand">
@@ -336,7 +343,7 @@
   </main>
 
   <!-- Cuadro de Diálogo Modal: Registro Rápido de Transacción -->
-  <dialog id="transaction-dialog" aria-labelledby="tx-dialog-title" class="modal-dialog">
+  <dialog id="transaction-dialog" closedby="any" aria-labelledby="tx-dialog-title" class="modal-dialog">
     <div class="dialog-content">
       <div class="dialog-header">
         <h2 id="tx-dialog-title" class="dialog-title">Registrar Transacción Financiera</h2>
@@ -374,6 +381,17 @@
         </div>
 
         <div class="form-group">
+          <label for="tx-account">Cuenta (Billetera / Banco) *</label>
+          <select id="tx-account" name="account" required class="form-select">
+            <option value="Efectivo" selected>💵 Efectivo</option>
+            <option value="Nequi">📱 Nequi</option>
+            <option value="Nu">🟣 Nu</option>
+            <option value="Daviplata">🔴 Daviplata</option>
+            <option value="Bancolombia">🟡 Bancolombia</option>
+          </select>
+        </div>
+
+        <div class="form-group">
           <label for="tx-description">Descripción / Concepto *</label>
           <input type="text" id="tx-description" name="description" placeholder="ej. Almuerzo corrientazo o Mercado Éxito" required class="form-input">
         </div>
@@ -392,7 +410,7 @@
   </dialog>
 
   <!-- Cuadro de Diálogo Modal: Registro Rápido de Tarea -->
-  <dialog id="task-dialog" aria-labelledby="task-dialog-title" class="modal-dialog">
+  <dialog id="task-dialog" closedby="any" aria-labelledby="task-dialog-title" class="modal-dialog">
     <div class="dialog-content">
       <div class="dialog-header">
         <h2 id="task-dialog-title" class="dialog-title">Crear Nueva Tarea</h2>
@@ -440,7 +458,7 @@
   </dialog>
 
   <!-- Modal: Transferencia Inter-Bancaria -->
-  <dialog id="transfer-dialog" aria-labelledby="transfer-dialog-title" class="modal-dialog">
+  <dialog id="transfer-dialog" closedby="any" aria-labelledby="transfer-dialog-title" class="modal-dialog">
     <div class="dialog-content">
       <div class="dialog-header">
         <h2 id="transfer-dialog-title" class="dialog-title">💸 Transferir Entre Cuentas</h2>
@@ -489,7 +507,7 @@
   </dialog>
 
   <!-- Modal: Registrar Deuda o Préstamo -->
-  <dialog id="debt-dialog" aria-labelledby="debt-dialog-title" class="modal-dialog">
+  <dialog id="debt-dialog" closedby="any" aria-labelledby="debt-dialog-title" class="modal-dialog">
     <div class="dialog-content">
       <div class="dialog-header">
         <h2 id="debt-dialog-title" class="dialog-title">🤝 Registrar Deuda o Préstamo</h2>
@@ -546,7 +564,7 @@
   </dialog>
 
   <!-- Modal: Liquidar / Abonar a Deuda -->
-  <dialog id="settle-dialog" aria-labelledby="settle-dialog-title" class="modal-dialog">
+  <dialog id="settle-dialog" closedby="any" aria-labelledby="settle-dialog-title" class="modal-dialog">
     <div class="dialog-content">
       <div class="dialog-header">
         <h2 id="settle-dialog-title" class="dialog-title">✅ Liquidar / Abonar a Deuda</h2>
@@ -590,7 +608,7 @@
   </dialog>
 
   <!-- Modal: Agregar Suscripción Recurrente -->
-  <dialog id="sub-dialog" aria-labelledby="sub-dialog-title" class="modal-dialog">
+  <dialog id="sub-dialog" closedby="any" aria-labelledby="sub-dialog-title" class="modal-dialog">
     <div class="dialog-content">
       <div class="dialog-header">
         <h2 id="sub-dialog-title" class="dialog-title">🔁 Nueva Suscripción Recurrente</h2>

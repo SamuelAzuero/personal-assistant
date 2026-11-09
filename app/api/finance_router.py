@@ -44,6 +44,7 @@ def set_finance_service(service: Optional[FinanceService]) -> None:
         _account_service_instance = AccountService(db_manager=db_mgr)
         _debt_service_instance = DebtService(db_manager=db_mgr, account_service=_account_service_instance)
         _subscription_service_instance = SubscriptionService(db_manager=db_mgr)
+        service.account_service = _account_service_instance
 
 
 def _get_active_db_manager() -> DatabaseManager:
@@ -58,12 +59,28 @@ def _get_active_db_manager() -> DatabaseManager:
 
 
 def get_effective_user_id(user_id: Optional[str] = None) -> str:
-    """Resolve effective user_id: if 'default_user' has no data, fallback to active Telegram user."""
-    eff_user = (user_id or "default_user").strip()
+    """Resolve effective user_id: if 'default_user' has no data, fallback to active Telegram user or active transactions."""
+    raw_user = (user_id or "").strip()
+    eff_user = raw_user if raw_user else "default_user"
     if eff_user == "default_user":
         try:
             db_mgr = _get_active_db_manager()
             with db_mgr.connection() as conn:
+                # 1. If default_user has transactions, keep default_user
+                def_tx = conn.execute(
+                    "SELECT 1 FROM transactions WHERE user_id = 'default_user' LIMIT 1;"
+                ).fetchone()
+                if def_tx:
+                    return "default_user"
+
+                # 2. Check the most recent user with transactions
+                tx_row = conn.execute(
+                    "SELECT user_id FROM transactions WHERE user_id != 'default_user' ORDER BY created_at DESC LIMIT 1;"
+                ).fetchone()
+                if tx_row and tx_row["user_id"]:
+                    return str(tx_row["user_id"])
+
+                # 3. If no transactions exist yet, fallback to active Telegram user
                 row = conn.execute(
                     "SELECT user_id FROM users WHERE telegram_chat_id IS NOT NULL ORDER BY created_at DESC LIMIT 1;"
                 ).fetchone()
@@ -87,6 +104,8 @@ def set_account_service(service: AccountService) -> None:
     """Set global AccountService instance for testing."""
     global _account_service_instance
     _account_service_instance = service
+    if _service_instance is not None and hasattr(_service_instance, "account_service"):
+        _service_instance.account_service = service
 
 
 def get_debt_service() -> DebtService:
@@ -131,6 +150,8 @@ class TransactionCreateRequest(BaseModel):
     timestamp: Optional[str] = None
     user_id: Optional[str] = "default_user"
     idempotency_key: Optional[str] = None
+    account: Optional[str] = None
+    account_name: Optional[str] = None
 
     @model_validator(mode="before")
     @classmethod
@@ -178,6 +199,17 @@ class TransactionCreateRequest(BaseModel):
         cat = values.get("category")
         if cat is not None and not str(cat).strip():
             raise ValueError("Transaction category cannot be empty.")
+
+        # Resolve account / account_name if provided
+        acc = values.get("account") or values.get("account_name")
+        if acc is not None:
+            clean_acc = str(acc).strip()
+            if not clean_acc:
+                values["account"] = None
+                values["account_name"] = None
+            else:
+                values["account"] = clean_acc
+                values["account_name"] = clean_acc
 
         # Validate date/timestamp if provided
         raw_date = values.get("date") or values.get("timestamp")
@@ -264,18 +296,8 @@ def get_summary(
     end_date: Optional[str] = Query(None, description="End date ISO-8601"),
     service: FinanceService = Depends(get_finance_service),
 ) -> Dict[str, Any]:
-    summary = _handle_summary(user_id, month, period, start_date, end_date, service)
-    if user_id == "default_user" and summary.get("transaction_count", 0) == 0:
-        try:
-            with service.repo.db.connection() as conn:
-                row = conn.execute("SELECT user_id FROM transactions ORDER BY created_at DESC LIMIT 1;").fetchone()
-                if row and row["user_id"] != user_id:
-                    alt_summary = _handle_summary(row["user_id"], month, period, start_date, end_date, service)
-                    if alt_summary.get("transaction_count", 0) > 0:
-                        return alt_summary
-        except Exception:
-            pass
-    return summary
+    eff_user = get_effective_user_id(user_id)
+    return _handle_summary(eff_user, month, period, start_date, end_date, service)
 
 
 def _handle_list_transactions(
@@ -288,6 +310,7 @@ def _handle_list_transactions(
     offset: int,
     service: FinanceService,
 ) -> List[Dict[str, Any]]:
+    eff_user = get_effective_user_id(user_id)
     if start_date:
         try:
             validate_iso_date(start_date)
@@ -306,7 +329,7 @@ def _handle_list_transactions(
             )
 
     txs = service.list_transactions(
-        user_id=user_id,
+        user_id=eff_user,
         start_date=start_date,
         end_date=end_date,
         category=category,
@@ -340,19 +363,29 @@ def get_categories(
     period: Optional[str] = Query(None),
     service: FinanceService = Depends(get_finance_service),
 ) -> List[Dict[str, Any]]:
-    return service.get_category_breakdown(user_id=user_id, month=month, period=period)
+    eff_user = get_effective_user_id(user_id)
+    return service.get_category_breakdown(user_id=eff_user, month=month, period=period)
 
 
 def _handle_create_transaction(
     payload: TransactionCreateRequest,
     service: FinanceService,
+    account_service: Optional[AccountService] = None,
 ) -> Dict[str, Any]:
     resolved_type = payload.type or payload.transaction_type
     raw_date = payload.date or payload.timestamp
+    eff_user = get_effective_user_id(payload.user_id)
+    acc_name = payload.account or payload.account_name
+    if acc_name:
+        acc_name = str(acc_name).strip()
+
+    acc_svc = account_service or get_account_service()
+    if acc_svc is not None and hasattr(service, "account_service"):
+        service.account_service = acc_svc
 
     try:
         record = service.record_transaction(
-            user_id=payload.user_id or "default_user",
+            user_id=eff_user,
             amount=payload.amount,
             amount_cents=payload.amount_cents,
             transaction_type=resolved_type,
@@ -360,6 +393,7 @@ def _handle_create_transaction(
             description=payload.description,
             timestamp=raw_date,
             idempotency_key=payload.idempotency_key,
+            account_name=acc_name,
         )
         return record.to_dict()
     except ValueError as e:
@@ -376,8 +410,9 @@ def _handle_create_transaction(
 def create_transaction(
     payload: TransactionCreateRequest,
     service: FinanceService = Depends(get_finance_service),
+    account_service: AccountService = Depends(get_account_service),
 ) -> Dict[str, Any]:
-    return _handle_create_transaction(payload, service)
+    return _handle_create_transaction(payload, service, account_service)
 
 
 @router.delete("/api/finance/transactions/{id}")
@@ -386,8 +421,12 @@ def delete_transaction(
     id: str,
     user_id: Optional[str] = Query(None),
     service: FinanceService = Depends(get_finance_service),
+    account_service: AccountService = Depends(get_account_service),
 ) -> Dict[str, Any]:
-    deleted = service.void_transaction(transaction_id=id, user_id=user_id)
+    eff_user = get_effective_user_id(user_id) if user_id else None
+    if account_service is not None and hasattr(service, "account_service"):
+        service.account_service = account_service
+    deleted = service.void_transaction(transaction_id=id, user_id=eff_user)
     return {
         "success": True,
         "message": "Transaction voided",
@@ -402,9 +441,10 @@ def create_budget(
     payload: BudgetCreateRequest,
     service: FinanceService = Depends(get_finance_service),
 ) -> Dict[str, Any]:
+    eff_user = get_effective_user_id(payload.user_id)
     try:
         return service.set_budget(
-            user_id=payload.user_id or "default_user",
+            user_id=eff_user,
             category=payload.category,
             monthly_limit=payload.monthly_limit,
             monthly_limit_cents=payload.monthly_limit_cents,
@@ -424,7 +464,8 @@ def list_budgets(
     period: Optional[str] = Query(None),
     service: FinanceService = Depends(get_finance_service),
 ) -> List[Dict[str, Any]]:
-    return service.repo.list_budgets(user_id=user_id, period=period)
+    eff_user = get_effective_user_id(user_id)
+    return service.repo.list_budgets(user_id=eff_user, period=period)
 
 
 # =============================================================================
@@ -542,7 +583,7 @@ def create_account(
     service: AccountService = Depends(get_account_service),
 ) -> Dict[str, Any]:
     """Create a new custom user account."""
-    eff_user = user_id or payload.user_id or "default_user"
+    eff_user = get_effective_user_id(user_id or payload.user_id)
     try:
         init_cents = payload.initial_balance_cents
         if payload.initial_balance is not None:
@@ -574,7 +615,7 @@ def execute_transfer(
     service: AccountService = Depends(get_account_service),
 ) -> Dict[str, Any]:
     """Execute an invariant-preserving inter-account transfer."""
-    eff_user = user_id or payload.user_id or "default_user"
+    eff_user = get_effective_user_id(user_id or payload.user_id)
     from_acc = payload.from_account or payload.from_account_name or payload.from_account_id
     to_acc = payload.to_account or payload.to_account_name or payload.to_account_id
     if not from_acc:
@@ -656,7 +697,7 @@ def create_debt(
     service: DebtService = Depends(get_debt_service),
 ) -> Dict[str, Any]:
     """Record a debt (owed by user) or loan (owed to user)."""
-    eff_user = user_id or payload.user_id or "default_user"
+    eff_user = get_effective_user_id(user_id or payload.user_id)
     resolved_type = payload.debt_type or payload.type or "receivable"
     if resolved_type == "debt":
         resolved_type = "payable"
@@ -701,7 +742,7 @@ def settle_debt_endpoint(
     service: DebtService = Depends(get_debt_service),
 ) -> Dict[str, Any]:
     """Execute a full or partial debt settlement payment."""
-    eff_user = user_id or (payload.user_id if payload else None) or "default_user"
+    eff_user = get_effective_user_id(user_id or (payload.user_id if payload else None))
     amt_cents = None
     account = None
     account_id = None
@@ -779,7 +820,7 @@ def create_subscription(
     service: SubscriptionService = Depends(get_subscription_service),
 ) -> Dict[str, Any]:
     """Add a new recurring subscription."""
-    eff_user = user_id or payload.user_id or "default_user"
+    eff_user = get_effective_user_id(user_id or payload.user_id)
     name = payload.name or payload.service_name
     if not name or not name.strip():
         raise HTTPException(status_code=422, detail="Subscription name cannot be empty.")

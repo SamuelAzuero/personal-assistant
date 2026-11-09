@@ -489,8 +489,18 @@ dialog.modal-dialog {
   padding: 0;
   max-width: 480px;
   width: 90%;
+  max-height: 90vh;
+  overflow-y: auto;
   box-shadow: var(--shadow-modal);
   margin: auto;
+}
+
+dialog:not([open]) {
+  display: none !important;
+}
+
+dialog.modal-dialog[open] {
+  display: block;
 }
 
 dialog:modal {

@@ -472,10 +472,27 @@ class FinanceService:
         }
 
     def void_transaction(self, transaction_id: str, user_id: Optional[str] = None) -> bool:
-        """Void / delete an errant transaction idempotently."""
+        """Void / delete an errant transaction idempotently, reversing linked account balance if present."""
         if not transaction_id or not str(transaction_id).strip():
             raise ValueError("Transaction ID cannot be empty.")
-        return self.repo.delete_transaction(transaction_id.strip(), user_id=user_id.strip() if user_id else None)
+        clean_tx_id = transaction_id.strip()
+        clean_user_id = user_id.strip() if user_id else None
+
+        # Look up transaction before deletion to retrieve linked account details
+        existing_tx = self.repo.get_transaction(clean_tx_id)
+        deleted = self.repo.delete_transaction(clean_tx_id, user_id=clean_user_id)
+        if deleted and existing_tx and getattr(self, "account_service", None):
+            if existing_tx.account_id:
+                t_type = (
+                    existing_tx.transaction_type.value
+                    if hasattr(existing_tx.transaction_type, "value")
+                    else str(existing_tx.transaction_type)
+                ).lower()
+                if t_type == "expense":
+                    self.account_service.adjust_balance(existing_tx.account_id, existing_tx.amount_cents)
+                elif t_type == "income":
+                    self.account_service.adjust_balance(existing_tx.account_id, -existing_tx.amount_cents)
+        return deleted
 
     def list_transactions(
         self,

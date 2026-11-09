@@ -65,55 +65,119 @@ document.addEventListener("DOMContentLoaded", () => {
     }, 4000);
   }
 
+  // Safe helpers for native dialogs across modern & legacy web platforms
+  function showModalSafe(dialog) {
+    if (!dialog) return;
+    if (dialog.open) return;
+    if (typeof dialog.showModal === "function") {
+      try {
+        dialog.showModal();
+      } catch (err) {
+        if (!dialog.open) {
+          dialog.setAttribute("open", "");
+        }
+      }
+    } else {
+      dialog.setAttribute("open", "");
+    }
+  }
+
+  function closeModalSafe(dialog) {
+    if (!dialog) return;
+    if (typeof dialog.close === "function") {
+      try {
+        if (dialog.open) {
+          dialog.close();
+        }
+      } catch (err) {
+        dialog.removeAttribute("open");
+        try {
+          dialog.dispatchEvent(new Event("close"));
+        } catch (_) {}
+      }
+    } else {
+      dialog.removeAttribute("open");
+      try {
+        dialog.dispatchEvent(new Event("close"));
+      } catch (_) {}
+    }
+  }
+
   // ================= Modal Dialog Controls =================
   if (btnOpenTx && txDialog) {
     btnOpenTx.addEventListener("click", () => {
       txForm.reset();
+      txForm.dataset.submitting = "false";
+      const submitBtn = document.getElementById("btn-submit-tx");
+      if (submitBtn) {
+        submitBtn.disabled = false;
+        submitBtn.textContent = "Guardar Transacción";
+      }
       const dateInput = document.getElementById("tx-date");
       if (dateInput) {
         dateInput.value = new Date().toISOString().split("T")[0];
       }
-      txDialog.showModal();
+      showModalSafe(txDialog);
     });
   }
   if (btnCloseTx && txDialog) {
-    btnCloseTx.addEventListener("click", () => txDialog.close());
+    btnCloseTx.addEventListener("click", () => closeModalSafe(txDialog));
   }
   if (btnCancelTx && txDialog) {
-    btnCancelTx.addEventListener("click", () => txDialog.close());
+    btnCancelTx.addEventListener("click", () => closeModalSafe(txDialog));
   }
 
   if (btnOpenTask && taskDialog) {
     btnOpenTask.addEventListener("click", () => {
       taskForm.reset();
-      taskDialog.showModal();
+      taskForm.dataset.submitting = "false";
+      const submitBtn = document.getElementById("btn-submit-task");
+      if (submitBtn) {
+        submitBtn.disabled = false;
+        submitBtn.textContent = "Agregar Tarea";
+      }
+      showModalSafe(taskDialog);
     });
   }
   if (btnCloseTask && taskDialog) {
-    btnCloseTask.addEventListener("click", () => taskDialog.close());
+    btnCloseTask.addEventListener("click", () => closeModalSafe(taskDialog));
   }
   if (btnCancelTask && taskDialog) {
-    btnCancelTask.addEventListener("click", () => taskDialog.close());
+    btnCancelTask.addEventListener("click", () => closeModalSafe(taskDialog));
   }
 
   // Transfer Dialog
   const openTransferModal = () => {
-    if (transferForm) transferForm.reset();
-    if (transferDialog) transferDialog.showModal();
+    if (transferForm) {
+      transferForm.reset();
+      transferForm.dataset.submitting = "false";
+      const submitBtn = document.getElementById("btn-submit-transfer");
+      if (submitBtn) {
+        submitBtn.disabled = false;
+        submitBtn.textContent = "Ejecutar Transferencia";
+      }
+    }
+    showModalSafe(transferDialog);
   };
   if (btnOpenTransfer) btnOpenTransfer.addEventListener("click", openTransferModal);
   if (btnQuickTransfer) btnQuickTransfer.addEventListener("click", openTransferModal);
   if (btnCloseTransfer && transferDialog) {
-    btnCloseTransfer.addEventListener("click", () => transferDialog.close());
+    btnCloseTransfer.addEventListener("click", () => closeModalSafe(transferDialog));
   }
   if (btnCancelTransfer && transferDialog) {
-    btnCancelTransfer.addEventListener("click", () => transferDialog.close());
+    btnCancelTransfer.addEventListener("click", () => closeModalSafe(transferDialog));
   }
 
   // Debt Dialog
   const openDebtModal = () => {
     if (debtForm) {
       debtForm.reset();
+      debtForm.dataset.submitting = "false";
+      const submitBtn = document.getElementById("btn-submit-debt");
+      if (submitBtn) {
+        submitBtn.disabled = false;
+        submitBtn.textContent = "Guardar Registro";
+      }
       const dateInput = document.getElementById("debt-due-date");
       if (dateInput) {
         // default to 7 days from now
@@ -122,52 +186,126 @@ document.addEventListener("DOMContentLoaded", () => {
         dateInput.value = d.toISOString().split("T")[0];
       }
     }
-    if (debtDialog) debtDialog.showModal();
+    showModalSafe(debtDialog);
   };
   if (btnOpenDebt) btnOpenDebt.addEventListener("click", openDebtModal);
   if (btnQuickDebt) btnQuickDebt.addEventListener("click", openDebtModal);
   if (btnCloseDebt && debtDialog) {
-    btnCloseDebt.addEventListener("click", () => debtDialog.close());
+    btnCloseDebt.addEventListener("click", () => closeModalSafe(debtDialog));
   }
   if (btnCancelDebt && debtDialog) {
-    btnCancelDebt.addEventListener("click", () => debtDialog.close());
+    btnCancelDebt.addEventListener("click", () => closeModalSafe(debtDialog));
   }
 
   // Settle Dialog Cancel
   if (btnCloseSettle && settleDialog) {
-    btnCloseSettle.addEventListener("click", () => settleDialog.close());
+    btnCloseSettle.addEventListener("click", () => closeModalSafe(settleDialog));
   }
   if (btnCancelSettle && settleDialog) {
-    btnCancelSettle.addEventListener("click", () => settleDialog.close());
+    btnCancelSettle.addEventListener("click", () => closeModalSafe(settleDialog));
   }
 
   // Subscription Dialog
   const openSubModal = () => {
-    if (subForm) subForm.reset();
-    if (subDialog) subDialog.showModal();
+    if (subForm) {
+      subForm.reset();
+      subForm.dataset.submitting = "false";
+      const submitBtn = document.getElementById("btn-submit-sub");
+      if (submitBtn) {
+        submitBtn.disabled = false;
+        submitBtn.textContent = "Guardar Suscripción";
+      }
+    }
+    showModalSafe(subDialog);
   };
   if (btnOpenSub) btnOpenSub.addEventListener("click", openSubModal);
   if (btnQuickSub) btnQuickSub.addEventListener("click", openSubModal);
   if (btnCloseSub && subDialog) {
-    btnCloseSub.addEventListener("click", () => subDialog.close());
+    btnCloseSub.addEventListener("click", () => closeModalSafe(subDialog));
   }
   if (btnCancelSub && subDialog) {
-    btnCancelSub.addEventListener("click", () => subDialog.close());
+    btnCancelSub.addEventListener("click", () => closeModalSafe(subDialog));
   }
 
-  // Close modals on clicking backdrop
+  // Close modals on clicking backdrop strictly via event target isolation
   [txDialog, taskDialog, transferDialog, debtDialog, settleDialog, subDialog].forEach(dialog => {
     if (!dialog) return;
+
+    let isBackdropTarget = false;
+    let touchMoved = false;
+
+    dialog.addEventListener("mousedown", (e) => {
+      isBackdropTarget = (e.target === dialog);
+    });
+
+    dialog.addEventListener("touchstart", (e) => {
+      isBackdropTarget = (e.target === dialog);
+      touchMoved = false;
+    }, { passive: true });
+
+    dialog.addEventListener("touchmove", () => {
+      // User is scrolling / swiping on mobile, cancel backdrop click trigger
+      touchMoved = true;
+      isBackdropTarget = false;
+    }, { passive: true });
+
+    dialog.addEventListener("touchend", () => {
+      if (touchMoved) {
+        isBackdropTarget = false;
+      }
+    }, { passive: true });
+
+    dialog.addEventListener("touchcancel", () => {
+      isBackdropTarget = false;
+      touchMoved = false;
+    }, { passive: true });
+
     dialog.addEventListener("click", (e) => {
-      const rect = dialog.getBoundingClientRect();
-      const isInDialog = (
-        rect.top <= e.clientY && e.clientY <= rect.top + rect.height &&
-        rect.left <= e.clientX && e.clientX <= rect.left + rect.width
-      );
-      if (!isInDialog) {
-        dialog.close();
+      // Close only if click directly targeted the backdrop element itself
+      // (either pointerdown occurred on backdrop, or keyboard/programmatic click where e.detail === 0)
+      const isDirectBackdrop = (e.target === dialog);
+      if (isDirectBackdrop && (isBackdropTarget || e.detail === 0) && !touchMoved) {
+        closeModalSafe(dialog);
+      }
+      isBackdropTarget = false;
+      touchMoved = false;
+    });
+
+    dialog.addEventListener("close", () => {
+      const form = dialog.querySelector("form");
+      if (form) {
+        form.dataset.submitting = "false";
+        const submitBtn = form.querySelector("button[type='submit']");
+        if (submitBtn) {
+          submitBtn.disabled = false;
+          const defaultTexts = {
+            "btn-submit-tx": "Guardar Transacción",
+            "btn-submit-task": "Agregar Tarea",
+            "btn-submit-transfer": "Ejecutar Transferencia",
+            "btn-submit-debt": "Guardar Registro",
+            "btn-submit-settle": "Confirmar Pago",
+            "btn-submit-sub": "Guardar Suscripción",
+          };
+          if (defaultTexts[submitBtn.id]) {
+            submitBtn.textContent = defaultTexts[submitBtn.id];
+          }
+        }
       }
     });
+
+    // Isolate modal content from backdrop event bubbling & dragging
+    const content = dialog.querySelector(".dialog-content");
+    if (content) {
+      content.addEventListener("click", (e) => {
+        e.stopPropagation();
+      });
+      content.addEventListener("mousedown", () => {
+        isBackdropTarget = false;
+      });
+      content.addEventListener("touchstart", () => {
+        isBackdropTarget = false;
+      }, { passive: true });
+    }
   });
 
   function formatCurrency(val) {
@@ -499,28 +637,46 @@ document.addEventListener("DOMContentLoaded", () => {
   if (txForm) {
     txForm.addEventListener("submit", async (e) => {
       e.preventDefault();
+      if (txForm.dataset.submitting === "true") return;
+      txForm.dataset.submitting = "true";
+
+      const submitBtn = document.getElementById("btn-submit-tx");
+      const originalText = submitBtn ? submitBtn.textContent : "Guardar Transacción";
+      if (submitBtn) {
+        submitBtn.disabled = true;
+        submitBtn.textContent = "Guardando...";
+      }
+
       const amount = parseFloat(document.getElementById("tx-amount").value);
       const type = document.getElementById("tx-type").value;
       const category = document.getElementById("tx-category").value;
       const description = document.getElementById("tx-description").value;
       const dateVal = document.getElementById("tx-date").value;
+      const accountEl = document.getElementById("tx-account");
+      const account = accountEl ? accountEl.value : undefined;
 
       try {
+        const payload = {
+          amount: amount,
+          type: type,
+          category: category,
+          description: description,
+          date: dateVal ? `${dateVal}T12:00:00Z` : undefined,
+          idempotency_key: "web-tx-" + Date.now() + "-" + Math.random().toString(36).slice(2, 9),
+        };
+        if (account) {
+          payload.account = account;
+        }
+
         const res = await fetch("/api/finance/transactions", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            amount: amount,
-            type: type,
-            category: category,
-            description: description,
-            date: dateVal ? `${dateVal}T12:00:00Z` : undefined,
-          }),
+          body: JSON.stringify(payload),
         });
 
         if (res.ok) {
           showAlert("¡Transacción registrada exitosamente!");
-          txDialog.close();
+          closeModalSafe(txDialog);
           refreshDashboard();
         } else {
           const errData = await res.json();
@@ -528,6 +684,12 @@ document.addEventListener("DOMContentLoaded", () => {
         }
       } catch (err) {
         showAlert("Error de red al registrar transacción", "error");
+      } finally {
+        txForm.dataset.submitting = "false";
+        if (submitBtn) {
+          submitBtn.disabled = false;
+          submitBtn.textContent = originalText;
+        }
       }
     });
   }
@@ -535,6 +697,16 @@ document.addEventListener("DOMContentLoaded", () => {
   if (taskForm) {
     taskForm.addEventListener("submit", async (e) => {
       e.preventDefault();
+      if (taskForm.dataset.submitting === "true") return;
+      taskForm.dataset.submitting = "true";
+
+      const submitBtn = document.getElementById("btn-submit-task");
+      const originalText = submitBtn ? submitBtn.textContent : "Agregar Tarea";
+      if (submitBtn) {
+        submitBtn.disabled = true;
+        submitBtn.textContent = "Guardando...";
+      }
+
       const title = document.getElementById("task-title").value;
       const priority = document.getElementById("task-priority").value;
       const category = document.getElementById("task-category").value;
@@ -556,7 +728,7 @@ document.addEventListener("DOMContentLoaded", () => {
 
         if (res.ok) {
           showAlert("¡Tarea creada exitosamente!");
-          taskDialog.close();
+          closeModalSafe(taskDialog);
           loadTasks();
         } else {
           const errData = await res.json();
@@ -564,6 +736,12 @@ document.addEventListener("DOMContentLoaded", () => {
         }
       } catch (err) {
         showAlert("Error de red al crear tarea", "error");
+      } finally {
+        taskForm.dataset.submitting = "false";
+        if (submitBtn) {
+          submitBtn.disabled = false;
+          submitBtn.textContent = originalText;
+        }
       }
     });
   }
@@ -740,7 +918,15 @@ document.addEventListener("DOMContentLoaded", () => {
             `;
           }
 
-          if (settleDialog) settleDialog.showModal();
+          if (settleForm) {
+            settleForm.dataset.submitting = "false";
+            const submitBtn = document.getElementById("btn-submit-settle");
+            if (submitBtn) {
+              submitBtn.disabled = false;
+              submitBtn.textContent = "Confirmar Pago";
+            }
+          }
+          showModalSafe(settleDialog);
         });
       });
 
@@ -837,6 +1023,16 @@ document.addEventListener("DOMContentLoaded", () => {
   if (transferForm) {
     transferForm.addEventListener("submit", async (e) => {
       e.preventDefault();
+      if (transferForm.dataset.submitting === "true") return;
+      transferForm.dataset.submitting = "true";
+
+      const submitBtn = document.getElementById("btn-submit-transfer");
+      const originalText = submitBtn ? submitBtn.textContent : "Ejecutar Transferencia";
+      if (submitBtn) {
+        submitBtn.disabled = true;
+        submitBtn.textContent = "Transfiriendo...";
+      }
+
       const fromAcc = document.getElementById("txf-from-account").value;
       const toAcc = document.getElementById("txf-to-account").value;
       const amount = document.getElementById("txf-amount").value;
@@ -856,7 +1052,7 @@ document.addEventListener("DOMContentLoaded", () => {
 
         if (res.ok) {
           showAlert("¡Transferencia ejecutada exitosamente!");
-          transferDialog.close();
+          closeModalSafe(transferDialog);
           loadAccounts();
           loadFinancialSummary();
         } else {
@@ -865,6 +1061,12 @@ document.addEventListener("DOMContentLoaded", () => {
         }
       } catch (err) {
         showAlert("Error de red al realizar transferencia", "error");
+      } finally {
+        transferForm.dataset.submitting = "false";
+        if (submitBtn) {
+          submitBtn.disabled = false;
+          submitBtn.textContent = originalText;
+        }
       }
     });
   }
@@ -872,6 +1074,16 @@ document.addEventListener("DOMContentLoaded", () => {
   if (debtForm) {
     debtForm.addEventListener("submit", async (e) => {
       e.preventDefault();
+      if (debtForm.dataset.submitting === "true") return;
+      debtForm.dataset.submitting = "true";
+
+      const submitBtn = document.getElementById("btn-submit-debt");
+      const originalText = submitBtn ? submitBtn.textContent : "Guardar Registro";
+      if (submitBtn) {
+        submitBtn.disabled = true;
+        submitBtn.textContent = "Guardando...";
+      }
+
       const debtType = document.getElementById("debt-type").value;
       const counterparty = document.getElementById("debt-counterparty").value;
       const amount = document.getElementById("debt-amount").value;
@@ -895,7 +1107,7 @@ document.addEventListener("DOMContentLoaded", () => {
 
         if (res.ok) {
           showAlert("¡Deuda o préstamo registrado exitosamente!");
-          debtDialog.close();
+          closeModalSafe(debtDialog);
           loadDebts();
           loadAccounts();
           loadPaymentCalendar();
@@ -905,6 +1117,12 @@ document.addEventListener("DOMContentLoaded", () => {
         }
       } catch (err) {
         showAlert("Error de red al registrar deuda", "error");
+      } finally {
+        debtForm.dataset.submitting = "false";
+        if (submitBtn) {
+          submitBtn.disabled = false;
+          submitBtn.textContent = originalText;
+        }
       }
     });
   }
@@ -912,6 +1130,16 @@ document.addEventListener("DOMContentLoaded", () => {
   if (settleForm) {
     settleForm.addEventListener("submit", async (e) => {
       e.preventDefault();
+      if (settleForm.dataset.submitting === "true") return;
+      settleForm.dataset.submitting = "true";
+
+      const submitBtn = document.getElementById("btn-submit-settle");
+      const originalText = submitBtn ? submitBtn.textContent : "Confirmar Pago";
+      if (submitBtn) {
+        submitBtn.disabled = true;
+        submitBtn.textContent = "Confirmando...";
+      }
+
       const debtId = document.getElementById("settle-debt-id").value;
       const amountVal = document.getElementById("settle-amount").value;
       const account = document.getElementById("settle-account").value;
@@ -934,7 +1162,7 @@ document.addEventListener("DOMContentLoaded", () => {
 
         if (res.ok) {
           showAlert("¡Pago / liquidación procesada exitosamente!");
-          settleDialog.close();
+          closeModalSafe(settleDialog);
           loadDebts();
           loadAccounts();
           loadPaymentCalendar();
@@ -944,6 +1172,12 @@ document.addEventListener("DOMContentLoaded", () => {
         }
       } catch (err) {
         showAlert("Error de red al liquidar deuda", "error");
+      } finally {
+        settleForm.dataset.submitting = "false";
+        if (submitBtn) {
+          submitBtn.disabled = false;
+          submitBtn.textContent = originalText;
+        }
       }
     });
   }
@@ -951,6 +1185,16 @@ document.addEventListener("DOMContentLoaded", () => {
   if (subForm) {
     subForm.addEventListener("submit", async (e) => {
       e.preventDefault();
+      if (subForm.dataset.submitting === "true") return;
+      subForm.dataset.submitting = "true";
+
+      const submitBtn = document.getElementById("btn-submit-sub");
+      const originalText = submitBtn ? submitBtn.textContent : "Guardar Suscripción";
+      if (submitBtn) {
+        submitBtn.disabled = true;
+        submitBtn.textContent = "Guardando...";
+      }
+
       const name = document.getElementById("sub-name").value;
       const amount = document.getElementById("sub-amount").value;
       const billingCycle = document.getElementById("sub-billing-cycle").value;
@@ -974,7 +1218,7 @@ document.addEventListener("DOMContentLoaded", () => {
 
         if (res.ok) {
           showAlert("¡Suscripción guardada exitosamente!");
-          subDialog.close();
+          closeModalSafe(subDialog);
           loadSubscriptions();
           loadPaymentCalendar();
         } else {
@@ -983,6 +1227,12 @@ document.addEventListener("DOMContentLoaded", () => {
         }
       } catch (err) {
         showAlert("Error de red al guardar suscripción", "error");
+      } finally {
+        subForm.dataset.submitting = "false";
+        if (submitBtn) {
+          submitBtn.disabled = false;
+          submitBtn.textContent = originalText;
+        }
       }
     });
   }
