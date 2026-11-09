@@ -12,6 +12,17 @@ load_dotenv()
 TOKEN = os.getenv('TELEGRAM_BOT_TOKEN')
 SECRET = os.getenv('TELEGRAM_SECRET_TOKEN') or os.getenv('TELEGRAM_WEBHOOK_SECRET', '')
 
+if not SECRET:
+    yaml_path = os.path.join(os.path.dirname(__file__), "..", "deploy", "cloud_run_env.yaml")
+    if os.path.exists(yaml_path):
+        try:
+            import yaml
+            with open(yaml_path, "r", encoding="utf-8") as f:
+                y = yaml.safe_load(f) or {}
+                SECRET = y.get("TELEGRAM_SECRET_TOKEN") or y.get("TELEGRAM_WEBHOOK_SECRET") or ""
+        except Exception:
+            pass
+
 if not TOKEN:
     print('❌ Error: TELEGRAM_BOT_TOKEN is not configured in .env')
     sys.exit(1)
