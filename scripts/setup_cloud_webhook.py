@@ -16,10 +16,14 @@ if not SECRET:
     yaml_path = os.path.join(os.path.dirname(__file__), "..", "deploy", "cloud_run_env.yaml")
     if os.path.exists(yaml_path):
         try:
-            import yaml
             with open(yaml_path, "r", encoding="utf-8") as f:
-                y = yaml.safe_load(f) or {}
-                SECRET = y.get("TELEGRAM_SECRET_TOKEN") or y.get("TELEGRAM_WEBHOOK_SECRET") or ""
+                for line in f:
+                    line = line.strip()
+                    if line.startswith("TELEGRAM_SECRET_TOKEN:") or line.startswith("TELEGRAM_WEBHOOK_SECRET:"):
+                        parts = line.split(":", 1)
+                        if len(parts) == 2:
+                            SECRET = parts[1].strip().strip('"').strip("'")
+                            break
         except Exception:
             pass
 
