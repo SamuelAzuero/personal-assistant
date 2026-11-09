@@ -113,7 +113,10 @@ class GeminiService:
                 if response and hasattr(response, "text") and response.text:
                     return response.text.strip()
             except Exception as e:
+                err_str = str(e)
                 logger.warning("Gemini generation error with model %s: %s", model, e)
+                if "RESOURCE_EXHAUSTED" in err_str or "429" in err_str or "Quota exceeded" in err_str:
+                    break
                 continue
 
         return None

@@ -15,12 +15,12 @@ from app.integrations.mocks import MockGmailClient
 logger = logging.getLogger(__name__)
 
 
-def _decode_mime_header(header_val: Optional[str]) -> str:
+def _decode_mime_header(header_val: Any) -> str:
     """Decode RFC 2047 MIME encoded-word header strings."""
     if not header_val:
         return ""
     try:
-        decoded_parts = decode_header(header_val)
+        decoded_parts = decode_header(str(header_val))
         result = []
         for part, encoding in decoded_parts:
             if isinstance(part, bytes):
@@ -29,7 +29,7 @@ def _decode_mime_header(header_val: Optional[str]) -> str:
                 result.append(str(part))
         return "".join(result)
     except Exception:
-        return header_val
+        return str(header_val)
 
 
 class GmailClient:
@@ -94,7 +94,7 @@ class GmailClient:
         msg = email.message_from_bytes(raw_email)
         subject = _decode_mime_header(msg.get("Subject", "(Sin Asunto)"))
         sender = _decode_mime_header(msg.get("From", "Desconocido"))
-        date_str = msg.get("Date", "")
+        date_str = str(msg.get("Date", "") or "")
 
         body_text = ""
         if msg.is_multipart():

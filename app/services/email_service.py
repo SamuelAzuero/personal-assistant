@@ -134,8 +134,9 @@ class EmailService:
         """Extract key headers from Gmail payload into a normalized dict."""
         headers_dict: Dict[str, str] = {}
         for h in payload.get("headers", []):
-            name = h.get("name", "").strip()
-            value = h.get("value", "").strip()
+            name = str(h.get("name", "") or "").strip()
+            val_raw = h.get("value", "")
+            value = str(val_raw or "").strip()
             if name:
                 headers_dict[name] = value
         return headers_dict
@@ -349,7 +350,7 @@ class EmailService:
                 if "PYTEST_CURRENT_TEST" not in os.environ:
                     from app.integrations.gemini_service import GeminiService
                     gem_svc = GeminiService()
-                    if gem_svc.is_available:
+                    if gem_svc.is_available():
                         gemini_summary = gem_svc.summarize_emails(items[:8])
             except Exception:
                 pass
