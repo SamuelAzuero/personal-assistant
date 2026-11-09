@@ -6,7 +6,7 @@ from typing import Any, Dict, List, Optional
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from pydantic import BaseModel, Field, model_validator
 
-from app.database.connection import get_default_manager
+from app.database.connection import DatabaseManager, get_default_manager
 from app.services.finance_service import FinanceService, validate_iso_date
 from app.services.account_service import AccountService
 from app.services.debt_service import DebtService
@@ -46,11 +46,39 @@ def set_finance_service(service: Optional[FinanceService]) -> None:
         _subscription_service_instance = SubscriptionService(db_manager=db_mgr)
 
 
+def _get_active_db_manager() -> DatabaseManager:
+    """Safely obtain active DatabaseManager instance."""
+    if _service_instance and hasattr(_service_instance, "repo"):
+        return (
+            getattr(_service_instance.repo, "db", None)
+            or getattr(_service_instance.repo, "db_manager", None)
+            or get_default_manager()
+        )
+    return get_default_manager()
+
+
+def get_effective_user_id(user_id: Optional[str] = None) -> str:
+    """Resolve effective user_id: if 'default_user' has no data, fallback to active Telegram user."""
+    eff_user = (user_id or "default_user").strip()
+    if eff_user == "default_user":
+        try:
+            db_mgr = _get_active_db_manager()
+            with db_mgr.connection() as conn:
+                row = conn.execute(
+                    "SELECT user_id FROM users WHERE telegram_chat_id IS NOT NULL ORDER BY created_at DESC LIMIT 1;"
+                ).fetchone()
+                if row and row["user_id"]:
+                    return str(row["user_id"])
+        except Exception:
+            pass
+    return eff_user
+
+
 def get_account_service() -> AccountService:
     """Dependency provider for AccountService."""
     global _account_service_instance
     if _account_service_instance is None:
-        db_mgr = _service_instance.repo.db_manager if _service_instance else get_default_manager()
+        db_mgr = _get_active_db_manager()
         _account_service_instance = AccountService(db_manager=db_mgr)
     return _account_service_instance
 
@@ -65,7 +93,7 @@ def get_debt_service() -> DebtService:
     """Dependency provider for DebtService."""
     global _debt_service_instance
     if _debt_service_instance is None:
-        db_mgr = _service_instance.repo.db_manager if _service_instance else get_default_manager()
+        db_mgr = _get_active_db_manager()
         _debt_service_instance = DebtService(db_manager=db_mgr, account_service=get_account_service())
     return _debt_service_instance
 
@@ -80,7 +108,7 @@ def get_subscription_service() -> SubscriptionService:
     """Dependency provider for SubscriptionService."""
     global _subscription_service_instance
     if _subscription_service_instance is None:
-        db_mgr = _service_instance.repo.db_manager if _service_instance else get_default_manager()
+        db_mgr = _get_active_db_manager()
         _subscription_service_instance = SubscriptionService(db_manager=db_mgr)
     return _subscription_service_instance
 
@@ -485,8 +513,9 @@ def list_accounts(
     service: AccountService = Depends(get_account_service),
 ) -> Any:
     """Retrieve all accounts and net worth breakdown."""
-    service.ensure_default_accounts(user_id)
-    net_worth = service.get_net_worth(user_id)
+    eff_user = get_effective_user_id(user_id)
+    service.ensure_default_accounts(eff_user)
+    net_worth = service.get_net_worth(eff_user)
     if as_list:
         return net_worth["accounts"]
     return net_worth
@@ -499,8 +528,9 @@ def get_net_worth_endpoint(
     service: AccountService = Depends(get_account_service),
 ) -> Dict[str, Any]:
     """Retrieve total net worth and asset allocation percentages."""
-    service.ensure_default_accounts(user_id)
-    return service.get_net_worth(user_id)
+    eff_user = get_effective_user_id(user_id)
+    service.ensure_default_accounts(eff_user)
+    return service.get_net_worth(eff_user)
 
 
 @router.post("/api/finance/accounts", status_code=status.HTTP_201_CREATED)
@@ -594,8 +624,9 @@ def list_debts(
     service: DebtService = Depends(get_debt_service),
 ) -> Any:
     """List debts and receivables with optional filters."""
+    eff_user = get_effective_user_id(user_id)
     records = service.list_debts(
-        user_id=user_id,
+        user_id=eff_user,
         debt_type=debt_type,
         status=status,
         counterparty=counterparty,
@@ -726,7 +757,8 @@ def list_subscriptions(
     service: SubscriptionService = Depends(get_subscription_service),
 ) -> Any:
     """List all recurring subscriptions."""
-    records = service.list_subscriptions(user_id=user_id, status=status)
+    eff_user = get_effective_user_id(user_id)
+    records = service.list_subscriptions(user_id=eff_user, status=status)
     raw_list = [r.to_dict() for r in records]
     if as_list:
         return raw_list
@@ -798,8 +830,9 @@ def get_upcoming_payments_calendar(
     service: SubscriptionService = Depends(get_subscription_service),
 ) -> Any:
     """Retrieve chronological timeline merging subscriptions, debts, and loan receivables."""
+    eff_user = get_effective_user_id(user_id)
     items = service.get_upcoming_payments(
-        user_id=user_id,
+        user_id=eff_user,
         days_ahead=days_ahead,
         reference_date=reference_date,
     )

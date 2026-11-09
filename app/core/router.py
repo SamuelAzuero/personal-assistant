@@ -59,7 +59,10 @@ class ToolRouter:
         if self.account_service is not None:
             return self.account_service
         from app.services.account_service import AccountService
-        self.account_service = AccountService()
+        db_mgr = None
+        if self.finance_service and hasattr(self.finance_service, "repo"):
+            db_mgr = getattr(self.finance_service.repo, "db", None) or getattr(self.finance_service.repo, "db_manager", None)
+        self.account_service = AccountService(db_manager=db_mgr)
         return self.account_service
 
     @property
@@ -68,7 +71,10 @@ class ToolRouter:
         if self.debt_service is not None:
             return self.debt_service
         from app.services.debt_service import DebtService
-        self.debt_service = DebtService(account_service=self.effective_account_service)
+        db_mgr = None
+        if self.finance_service and hasattr(self.finance_service, "repo"):
+            db_mgr = getattr(self.finance_service.repo, "db", None) or getattr(self.finance_service.repo, "db_manager", None)
+        self.debt_service = DebtService(db_manager=db_mgr, account_service=self.effective_account_service)
         return self.debt_service
 
     @property
@@ -77,7 +83,10 @@ class ToolRouter:
         if self.subscription_service is not None:
             return self.subscription_service
         from app.services.subscription_service import SubscriptionService
-        self.subscription_service = SubscriptionService()
+        db_mgr = None
+        if self.finance_service and hasattr(self.finance_service, "repo"):
+            db_mgr = getattr(self.finance_service.repo, "db", None) or getattr(self.finance_service.repo, "db_manager", None)
+        self.subscription_service = SubscriptionService(db_manager=db_mgr)
         return self.subscription_service
 
     def _is_spanish(self, text: str) -> bool:
@@ -164,6 +173,7 @@ class ToolRouter:
         )
         category = slots.get("category", "Other")
         description = slots.get("description", "Transaction")
+        account_name = slots.get("account_name") or slots.get("account")
 
         dollars = amount_cents / 100.0
 
@@ -178,6 +188,23 @@ class ToolRouter:
             alerts = self.finance_service.check_budget_alerts(user_id)
         else:
             alerts = []
+
+        # Adjust balance on linked account
+        acc_updated = None
+        total_nw = None
+        if amount_cents > 0:
+            try:
+                acc_svc = self.effective_account_service
+                acc_svc.ensure_default_accounts(user_id)
+                target_name = account_name or "Efectivo"
+                acc = acc_svc.get_account_by_name(user_id, target_name)
+                if acc:
+                    delta = amount_cents if t_type == TransactionType.INCOME else -amount_cents
+                    acc_updated = acc_svc.adjust_balance(acc.id, delta)
+                    nw = acc_svc.get_net_worth(user_id)
+                    total_nw = nw.get("total_net_worth", 0)
+            except Exception as e:
+                logger.error(f"Failed to adjust balance for account {account_name}: {e}")
 
         category_map = {
             "Food & Dining": "Alimentación y Restaurantes",
@@ -208,6 +235,10 @@ class ToolRouter:
                     f"• **Descripción:** {description}\n"
                     f"• **Categoría:** *{cat_display}*"
                 )
+            if acc_updated:
+                msg += f"\n• **Cuenta:** {acc_updated.name} (Nuevo Saldo: `${acc_updated.balance:,.0f} COP`)"
+            if total_nw is not None and account_name:
+                msg += f"\n\n💰 **Patrimonio Neto Total:** **${total_nw:,.0f} COP**"
             if alerts:
                 alert_text = "\n".join(f"• ⚠️ {a}" for a in alerts)
                 msg += f"\n\n**Advertencias de Presupuesto:**\n{alert_text}"
@@ -226,6 +257,8 @@ class ToolRouter:
                     f"• **Description:** {description}\n"
                     f"• **Category:** *{category}*"
                 )
+            if acc_updated:
+                msg += f"\n• **Account:** {acc_updated.name} (New Balance: `${acc_updated.balance:,.2f}`)"
             if alerts:
                 alert_text = "\n".join(f"• ⚠️ {a}" for a in alerts)
                 msg += f"\n\n**Budget Warnings:**\n{alert_text}"
@@ -916,9 +949,38 @@ class ToolRouter:
     def _handle_account_query(
         self, user_id: str, slots: Dict[str, Any], is_spanish: bool = False
     ) -> str:
-        """Handle balance and net worth inquiries."""
+        """Handle balance and net worth inquiries, or direct balance updates."""
         svc = self.effective_account_service
         svc.ensure_default_accounts(user_id)
+
+        action = slots.get("action")
+        if action == "set_balance" and slots.get("amount_cents") is not None:
+            target_acc_name = slots.get("account_name")
+            if not target_acc_name and slots.get("account_names"):
+                target_acc_name = slots["account_names"][0]
+            if target_acc_name:
+                acc = svc.get_account_by_name(user_id, target_acc_name)
+                if acc:
+                    amt_cents = slots["amount_cents"]
+                    updated = svc.set_balance(acc.id, amt_cents)
+                    net_worth = svc.get_net_worth(user_id)
+                    total_nw = net_worth.get("total_net_worth", 0)
+                    bal_fmt = f"${updated.balance:,.0f} COP"
+                    icon_map = {
+                        "efectivo": "💵",
+                        "nequi": "📱",
+                        "nu": "🟣",
+                        "daviplata": "🔴",
+                        "bancolombia": "🟡",
+                    }
+                    icon = icon_map.get(updated.name.lower(), "💳")
+                    return (
+                        f"✅ **Saldo Actualizado con Éxito**\n\n"
+                        f"• {icon} **Cuenta:** {updated.name}\n"
+                        f"• **Nuevo Saldo:** **{bal_fmt}**\n\n"
+                        f"💰 **Patrimonio Neto Total:** **${total_nw:,.0f} COP**"
+                    )
+
         account_names = slots.get("account_names") or slots.get("accounts") or []
         all_accounts = slots.get("all_accounts", len(account_names) == 0)
 

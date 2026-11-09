@@ -312,6 +312,48 @@ class TestMultiTurnSlotResolution:
         assert resolved.slots.get("amount") == 50000.0
         assert resolved.slots.get("counterparty") == "Carlos"
 
+    def test_parse_add_money_to_account(self, intent_parser):
+        r1 = intent_parser.parse("añadir 50000 a mi cuenta de nequi")
+        assert r1.intent == IntentType.FINANCE_ENTRY
+        assert r1.slots.get("transaction_type") == "income"
+        assert r1.slots.get("account_name") == "Nequi"
+        assert r1.slots.get("amount_cents") == 5000000
+
+        r2 = intent_parser.parse("meter 100k a bancolombia")
+        assert r2.intent == IntentType.FINANCE_ENTRY
+        assert r2.slots.get("transaction_type") == "income"
+        assert r2.slots.get("account_name") == "Bancolombia"
+        assert r2.slots.get("amount_cents") == 10000000
+
+    def test_parse_set_account_balance(self, intent_parser):
+        r1 = intent_parser.parse("tengo 200 mil en nu")
+        assert r1.intent == IntentType.ACCOUNT_QUERY
+        assert r1.slots.get("action") == "set_balance"
+        assert r1.slots.get("account_name") == "Nu"
+        assert r1.slots.get("amount_cents") == 20000000
+
+    def test_parse_colombian_debts_and_receivables(self, intent_parser):
+        # Juan me debe 50k -> Receivable
+        r1 = intent_parser.parse("juan me debe 50k")
+        assert r1.intent == IntentType.DEBT_RECORD
+        assert r1.slots.get("debt_type") == "receivable"
+        assert r1.slots.get("counterparty") == "Juan"
+        assert r1.slots.get("amount_cents") == 5000000
+
+        # tengo una deuda de 50 mil con andres -> Payable
+        r2 = intent_parser.parse("tengo una deuda de 50 mil con andres")
+        assert r2.intent == IntentType.DEBT_RECORD
+        assert r2.slots.get("debt_type") == "payable"
+        assert r2.slots.get("counterparty") == "Andres"
+        assert r2.slots.get("amount_cents") == 5000000
+
+        # le debo 30000 a pedro -> Payable
+        r3 = intent_parser.parse("le debo 30000 a pedro")
+        assert r3.intent == IntentType.DEBT_RECORD
+        assert r3.slots.get("debt_type") == "payable"
+        assert r3.slots.get("counterparty") == "Pedro"
+        assert r3.slots.get("amount_cents") == 3000000
+
 
 # ==============================================================================
 # 3. Tool Router: Integration & Formatting
@@ -449,6 +491,55 @@ class TestToolRouterBanking:
         )
         msg_upcoming = tool_router.dispatch(user_id=user_id, intent_result=intent_upcoming)
         assert "📅" in msg_upcoming
+
+    def test_route_add_money_to_nequi(self, tool_router, account_service, intent_parser):
+        user_id = "usr_deposit_test"
+        account_service.initialize_default_accounts(user_id)
+        parsed = intent_parser.parse("añadir 50000 a mi cuenta de nequi")
+        msg = tool_router.dispatch(user_id=user_id, intent_result=parsed)
+        assert "Ingreso Registrado con Éxito" in msg
+        assert "Nequi" in msg
+        assert "50,000" in msg or "50.000" in msg
+
+        # Verify Nequi balance is updated in DB
+        nequi = account_service.get_account_by_name(user_id, "Nequi")
+        assert nequi.balance_cents == 5000000
+
+    def test_route_set_nu_balance(self, tool_router, account_service, intent_parser):
+        user_id = "usr_set_bal_test"
+        account_service.initialize_default_accounts(user_id)
+        parsed = intent_parser.parse("tengo 200 mil en nu")
+        msg = tool_router.dispatch(user_id=user_id, intent_result=parsed)
+        assert "Saldo Actualizado con Éxito" in msg
+        assert "Nu" in msg
+        assert "200,000" in msg or "200.000" in msg
+
+        # Verify Nu balance is set in DB
+        nu = account_service.get_account_by_name(user_id, "Nu")
+        assert nu.balance_cents == 20000000
+
+    def test_route_juan_me_debe_and_debt_query(self, tool_router, account_service, intent_parser):
+        user_id = "usr_deuda_test"
+        account_service.initialize_default_accounts(user_id)
+
+        # 1. Register receivable
+        parsed_rec = intent_parser.parse("juan me debe 50k")
+        msg_rec = tool_router.dispatch(user_id=user_id, intent_result=parsed_rec)
+        assert "🤝" in msg_rec
+        assert "Juan" in msg_rec
+        assert "50,000" in msg_rec or "50.000" in msg_rec
+
+        # 2. Register debt
+        parsed_pay = intent_parser.parse("tengo una deuda de 50 mil con andres")
+        msg_pay = tool_router.dispatch(user_id=user_id, intent_result=parsed_pay)
+        assert "📝" in msg_pay
+        assert "Andres" in msg_pay
+
+        # 3. Query all debts
+        parsed_q = intent_parser.parse("mis deudas")
+        msg_q = tool_router.dispatch(user_id=user_id, intent_result=parsed_q)
+        assert "Juan" in msg_q
+        assert "Andres" in msg_q
 
 
 # ==============================================================================

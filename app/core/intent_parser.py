@@ -1021,39 +1021,69 @@ class IntentParser(IntentParserProtocol):
         )
 
     def _parse_debt_record(self, raw: str, lower: str) -> Optional[IntentResult]:
-        """Detect and extract debts and loans (e.g. le presté 50k a Juan, Juan me prestó 30 mil)."""
+        """Detect and extract debts and loans (e.g. le presté 50k a Juan, Juan me debe 50k, le debo 30 mil)."""
         is_receivable = bool(
-            re.search(r"\b(le\s+prest[eé]|prest[eé]|prestar|prestamos|di\s+prestado|le\s+di\s+prestado)\b", lower)
+            re.search(
+                r"\b(le\s+prest[eé]|prest[eé]|prestar|prestamos|di\s+prestado|le\s+di\s+prestado|me\s+debe|me\s+deben)\b",
+                lower,
+            )
         )
         is_debt = bool(
-            re.search(r"\b(me\s+prest[oó]|me\s+prestaron|le\s+debo|debo\b|deuda\s+con|pr[eé]stamo\s+de)\b", lower)
+            re.search(
+                r"\b(me\s+prest[oó]|me\s+prestaron|le\s+debo|debo\b|deuda\b.*?con|tengo\s+una\s+deuda|pr[eé]stamo\s+de)\b",
+                lower,
+            )
         )
 
         if not (is_receivable or is_debt):
             return None
 
-        # Exclude questions like "a quién le debo?" -> DEBT_QUERY
-        if re.search(r"\b(qui[eé]n|cu[aá]nto|mis\s+deudas|deudas\s+pendientes)\b", lower):
+        # Exclude explicit questions like "a quién le debo?", "¿quién me debe?", "mis deudas" -> DEBT_QUERY
+        if re.search(r"\b(a\s+qui[eé]n|qui[eé]n|cu[aá]nto|mis\s+deudas|deudas\s+pendientes)\b", lower) and not re.search(r"\b\d+\b", lower):
             return None
 
         debt_type = "receivable" if is_receivable else "debt"
         counterparty = None
 
         if is_receivable:
-            m = re.search(r"\b(?:a|para)\s+([A-ZÁÉÍÓÚa-záéíóú]+)", raw)
-            if m:
-                cand = m.group(1).strip()
-                if cand.lower() not in (
-                    "un", "una", "el", "la", "los", "las", "mi", "mis",
-                    "nequi", "nu", "daviplata", "bancolombia", "efectivo"
-                ):
+            m_front = re.search(r"([A-ZÁÉÍÓÚa-záéíóú]+)\s+me\s+debe\b", raw, re.IGNORECASE)
+            if m_front:
+                cand = m_front.group(1).strip()
+                if cand.lower() not in ("él", "el", "ella", "alguien", "hoy", "ayer", "ya", "quién", "quien"):
                     counterparty = cand.capitalize()
+            if not counterparty:
+                m_back = re.search(r"\bme\s+debe\s+([A-ZÁÉÍÓÚa-záéíóú]+)", raw, re.IGNORECASE)
+                if m_back:
+                    cand = m_back.group(1).strip()
+                    if cand.lower() not in (
+                        "un", "una", "el", "la", "los", "las", "mi", "mis",
+                        "nequi", "nu", "daviplata", "bancolombia", "efectivo", "plata", "dinero"
+                    ):
+                        counterparty = cand.capitalize()
+            if not counterparty:
+                m = re.search(r"\b(?:a|para)\s+([A-ZÁÉÍÓÚa-záéíóú]+)", raw)
+                if m:
+                    cand = m.group(1).strip()
+                    if cand.lower() not in (
+                        "un", "una", "el", "la", "los", "las", "mi", "mis",
+                        "nequi", "nu", "daviplata", "bancolombia", "efectivo"
+                    ):
+                        counterparty = cand.capitalize()
         else:
             m1 = re.search(r"([A-ZÁÉÍÓÚa-záéíóú]+)\s+me\s+prest[oó]", raw, re.IGNORECASE)
             if m1:
                 cand = m1.group(1).strip()
                 if cand.lower() not in ("ayer", "hoy", "ya", "él", "el", "ella"):
                     counterparty = cand.capitalize()
+            if not counterparty:
+                m_con = re.search(r"\b(?:con|a)\s+([A-ZÁÉÍÓÚa-záéíóú]+)", raw, re.IGNORECASE)
+                if m_con:
+                    cand = m_con.group(1).strip()
+                    if cand.lower() not in (
+                        "un", "una", "el", "la", "los", "las", "mi", "mis",
+                        "nequi", "nu", "daviplata", "bancolombia", "efectivo", "plata", "dinero"
+                    ):
+                        counterparty = cand.capitalize()
             if not counterparty:
                 m2 = re.search(
                     r"\b(?:le\s+debo|debo)\s+(?:[\$0-9k\.\,\s]+(?:mil|k|pesos|millones)?\s+)?a\s+([A-ZÁÉÍÓÚa-záéíóú]+)",
@@ -1293,7 +1323,7 @@ class IntentParser(IntentParserProtocol):
         )
 
     def _parse_account_query(self, raw: str, lower: str) -> Optional[IntentResult]:
-        """Detect and extract account balance and net worth inquiries."""
+        """Detect and extract account balance inquiries or explicit balance updates."""
         has_known_bank = any(bool(re.search(rf"\b{k}\b", lower)) for k in COLOMBIAN_ACCOUNTS)
         has_explicit_accounts = bool(re.search(r"\b(mis\s+cuentas|cuentas\s+bancarias|cuentas|patrimonio)\b", lower))
 
@@ -1304,10 +1334,44 @@ class IntentParser(IntentParserProtocol):
         if re.search(r"\b(gastos?|ingresos?|resumen|categor[ií]as?)\b", lower) and not has_known_bank:
             return None
 
+        amount_cents = self._extract_amount_cents(raw)
+
+        # Do NOT hijack deposit, expense, debt or transfer actions that should be handled as financial transactions or debts
+        deposit_or_expense_verbs = bool(re.search(
+            r"\b(a[ñn]adir|agregar|meter|consignar|consign[eé]|cargar|cargu[eé]|abono|abonar|dep[oó]sito|gast[eé]|pagu[eé]|compr[eé]|prest[eé]|debo|deuda)\b",
+            lower
+        ))
+        if deposit_or_expense_verbs and amount_cents is not None:
+            return None
+
         matched = []
         for acc_k, acc_name in COLOMBIAN_ACCOUNTS.items():
             if re.search(rf"\b{acc_k}\b", lower):
                 matched.append(acc_name)
+
+        is_query_phrase = bool(re.search(r"\b(cu[aá]nto|cu[aá]nta|qu[eé]\s+saldo|c[oó]mo\s+est[aá]|ver|consultar|mostrar)\b", lower))
+
+        # Check if user is declaring an initial or current balance:
+        # e.g. "tengo 200 mil en nu", "mi saldo en nequi es 500.000", "en efectivo tengo 50k", "poner saldo de nu en 300k"
+        is_setting = bool(re.search(r"\b(tengo|saldo\s+en|mi\s+saldo\s+en|tengo\s+en|en\s+[a-z]+\s+tengo|poner\s+saldo|actualizar\s+saldo|saldo\s+es|saldo\s+de)\b", lower))
+        if is_setting and amount_cents is not None and not is_query_phrase and matched:
+            target_acc = matched[0]
+            return IntentResult(
+                intent=IntentType.ACCOUNT_QUERY,
+                confidence=0.95,
+                slots={
+                    "action": "set_balance",
+                    "account_name": target_acc,
+                    "account_names": [target_acc],
+                    "accounts": [target_acc],
+                    "amount_cents": amount_cents,
+                    "amount": amount_cents / 100.0,
+                    "all_accounts": False,
+                },
+                is_complete=True,
+                missing_slots=[],
+                raw_text=raw,
+            )
 
         all_accounts = len(matched) == 0 or "mis cuentas" in lower or "total" in lower or "patrimonio" in lower or "todas" in lower
 
@@ -1315,6 +1379,7 @@ class IntentParser(IntentParserProtocol):
             intent=IntentType.ACCOUNT_QUERY,
             confidence=0.95,
             slots={
+                "action": "query",
                 "account_names": matched,
                 "accounts": matched,
                 "all_accounts": all_accounts,
@@ -1334,7 +1399,9 @@ class IntentParser(IntentParserProtocol):
             "received", "got paid", "salary", "deposit", "earned", "income",
             "dividend", "bonus", "reimbursement", "paycheck",
             "ingreso", "ingresos", "me pagaron", "recibí", "recibi", "gané", "gane",
-            "sueldo", "salario", "nómina", "nomina", "honorarios", "quincena", "prima"
+            "sueldo", "salario", "nómina", "nomina", "honorarios", "quincena", "prima",
+            "añadir", "anadir", "agregar", "meter", "consignar", "consigné", "consigne",
+            "cargar", "cargué", "cargue", "abono", "abonar", "depósito", "deposito", "entró", "entro"
         ]
         expense_words = [
             "spent", "pay", "paid", "bought", "purchase", "purchased",
@@ -1361,8 +1428,25 @@ class IntentParser(IntentParserProtocol):
         # Determine transaction type
         t_type = TransactionType.INCOME if has_income else TransactionType.EXPENSE
 
+        # Extract linked account if mentioned
+        account_name = None
+        for acc_k, acc_v in COLOMBIAN_ACCOUNTS.items():
+            if re.search(rf"\b{acc_k}\b", lower):
+                account_name = acc_v
+                break
+
         # Extract description and category
         desc = self._extract_finance_description(raw, lower)
+        cleaned_desc_lower = desc.lower().strip() if desc else ""
+        if not desc or cleaned_desc_lower in (
+            "mi cuenta de nequi", "cuenta de nequi", "nequi", "nu", "bancolombia", "daviplata", "efectivo",
+            "a mi cuenta", "cuenta", "mi cuenta", "a bancolombia", "a nequi", "a nu", "a daviplata", "a efectivo"
+        ) or (cleaned_desc_lower.startswith("a ") and account_name and account_name.lower() in cleaned_desc_lower):
+            if account_name:
+                desc = f"Depósito en {account_name}" if t_type == TransactionType.INCOME else f"Gasto desde {account_name}"
+            else:
+                desc = None
+
         category = self._infer_category(desc or raw) if desc else "Other"
         if t_type == TransactionType.INCOME and category == "Other":
             category = "Income"
@@ -1371,6 +1455,10 @@ class IntentParser(IntentParserProtocol):
             "transaction_type": t_type.value,
             "category": category,
         }
+        if account_name:
+            slots["account_name"] = account_name
+            slots["account"] = account_name
+
         missing_slots: List[str] = []
 
         if amount_cents is not None:
@@ -1679,7 +1767,8 @@ class IntentParser(IntentParserProtocol):
             r"received|got paid|deposit|earned|income:?|for|on|"
             r"gasté|gaste|pagué|pague|compré|compre|consumí|consumi|costó|costo|me costó|pago|compra|"
             r"ingreso de|ingreso|ingresos|me pagaron|recibí|recibi|gané|gane|sueldo|salario|"
-            r"en|de|por|para|un|una|el|la|los|las|hoy|ayer|ahora|ahorita|"
+            r"añadir a mi cuenta de|añadir a mi cuenta|añadir a|añadir|anadir|agregar a|agregar|meter a|meter|consignar en|consignar a|consignar|consigné en|consigné|consigne|cargar a|cargar|cargué|cargue|abono a|abono|abonar|"
+            r"en|de|por|para|un|una|el|la|los|las|hoy|ayer|ahora|ahorita|mi\s+cuenta\s+de|cuenta\s+de|mi\s+cuenta|cuenta|"
             r"i want to log an|i want to log|want to log|log an|log|record an|record|add an|add)\b",
             "",
             cleaned,
@@ -1687,7 +1776,7 @@ class IntentParser(IntentParserProtocol):
         )
         cleaned = re.sub(r"[:,\-]", " ", cleaned).strip()
         cleaned = re.sub(r"\s+", " ", cleaned).strip()
-        if cleaned.lower() in ("an", "a", "the", "to", "my", "i want to", "i want", "want", "de", "en", "por", "para"):
+        if cleaned.lower() in ("an", "a", "the", "to", "my", "i want to", "i want", "want", "de", "en", "por", "para", "nequi", "nu", "daviplata", "bancolombia", "efectivo"):
             return None
         return cleaned if cleaned else None
 

@@ -106,6 +106,11 @@ class FinanceRepository:
     def __init__(self, db_manager: Optional[DatabaseManager] = None):
         self.db = db_manager or get_default_manager()
 
+    @property
+    def db_manager(self) -> DatabaseManager:
+        """Alias property for backward compatibility with db attribute."""
+        return self.db
+
     def ensure_user(self, user_id: str, full_name: Optional[str] = None) -> None:
         """Ensure a user record exists to satisfy foreign key constraints."""
         with self.db.connection() as conn:
