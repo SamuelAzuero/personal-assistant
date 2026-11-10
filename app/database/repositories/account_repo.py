@@ -5,7 +5,7 @@ import uuid
 from contextlib import contextmanager
 from dataclasses import dataclass
 from datetime import datetime, timezone
-from typing import Any, Dict, Generator, List, Optional, Union
+from typing import Any, Dict, Generator, List, Optional, Tuple, Union
 
 from app.database.connection import (
     DatabaseManager,
@@ -301,6 +301,79 @@ class AccountRepository:
             if not row:
                 raise ValueError(f"Account '{account_id}' does not exist.")
             return self._row_to_account(row)
+
+    def execute_balance_operation(
+        self,
+        user_id: str,
+        account_id: str,
+        delta_cents: int,
+        transaction_type: str,
+        category: str,
+        description: str,
+        timestamp: Optional[Union[datetime, str]] = None,
+    ) -> Tuple[AccountRecord, Dict[str, Any]]:
+        """Atomically adjust account balance and record ledger transaction in a single SQLite transaction."""
+        tx_id = f"tx_{uuid.uuid4().hex[:12]}"
+        ts = parse_datetime(timestamp) if timestamp else datetime.now(timezone.utc)
+        now_time = datetime.now(timezone.utc)
+        iso_ts = ts.isoformat()
+        iso_created = now_time.isoformat()
+
+        with self._connection() as conn:
+            conn.execute(
+                """
+                UPDATE accounts
+                SET balance_cents = balance_cents + ?, updated_at = CURRENT_TIMESTAMP
+                WHERE account_id = ?;
+                """,
+                (delta_cents, account_id),
+            )
+            row = conn.execute(
+                "SELECT * FROM accounts WHERE account_id = ?;",
+                (account_id,),
+            ).fetchone()
+            if not row:
+                raise ValueError(f"Account '{account_id}' does not exist.")
+            acc = self._row_to_account(row)
+
+            conn.execute(
+                """
+                INSERT INTO transactions (
+                    transaction_id, user_id, amount_cents, transaction_type,
+                    category, description, timestamp, created_at,
+                    account_id, account_name
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?);
+                """,
+                (
+                    tx_id,
+                    user_id,
+                    abs(delta_cents),
+                    transaction_type,
+                    category.strip(),
+                    description.strip(),
+                    iso_ts,
+                    iso_created,
+                    acc.id,
+                    acc.name,
+                ),
+            )
+
+        tx_dict = {
+            "id": tx_id,
+            "transaction_id": tx_id,
+            "user_id": user_id,
+            "amount_cents": abs(delta_cents),
+            "amount": round(abs(delta_cents) / 100.0, 2),
+            "type": transaction_type,
+            "transaction_type": transaction_type,
+            "category": category.strip(),
+            "description": description.strip(),
+            "timestamp": iso_ts,
+            "created_at": iso_created,
+            "account_id": acc.id,
+            "account_name": acc.name,
+        }
+        return acc, tx_dict
 
     def log_transfer(
         self,

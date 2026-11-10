@@ -16,8 +16,8 @@ FROM python:3.12-slim AS runner
 
 WORKDIR /app
 
-# Create non-root unprivileged service user for security
-RUN groupadd -r appuser && useradd -r -u 1001 -g appuser appuser
+# Create non-root unprivileged service user for security (explicit UID 1001, GID 1001)
+RUN groupadd -g 1001 appuser && useradd -r -u 1001 -g 1001 appuser
 
 # Copy installed Python packages from builder stage
 COPY --from=builder /root/.local /home/appuser/.local
@@ -25,8 +25,8 @@ COPY --from=builder /root/.local /home/appuser/.local
 # Copy application source code and static dashboard assets
 COPY app/ /app/app/
 
-# Create persistent data directory and set permissions
-RUN mkdir -p /app/data && chown -R appuser:appuser /app /home/appuser
+# Create persistent data directory and set permissions matching FUSE dir-mode 0700
+RUN mkdir -p /app/data && chown -R appuser:appuser /app /home/appuser && chmod 700 /app/data
 
 # Switch to non-root user
 USER appuser

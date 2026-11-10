@@ -71,6 +71,12 @@ class DebtService:
         account_name: Optional[str] = None,
         account_id: Optional[str] = None,
         adjust_account_balance: bool = True,
+        is_installment: bool = False,
+        total_installments: int = 1,
+        remaining_installments: Optional[int] = None,
+        installment_amount_cents: Optional[int] = None,
+        payment_frequency: str = "monthly",
+        next_installment_due_date: Optional[Union[datetime, str]] = None,
     ) -> DebtRecord:
         """Record a debt (owed to others) or receivable/loan (owed by others).
 
@@ -108,6 +114,12 @@ class DebtService:
             due_date=due_date,
             account_id=account.id if account else None,
             account_name=account.name if account else None,
+            is_installment=is_installment,
+            total_installments=total_installments,
+            remaining_installments=remaining_installments,
+            installment_amount_cents=installment_amount_cents,
+            payment_frequency=payment_frequency,
+            next_installment_due_date=next_installment_due_date,
         )
 
     def record_payment(
@@ -140,9 +152,11 @@ class DebtService:
         if debt.status in (DebtStatus.SETTLED, DebtStatus.CANCELLED):
             raise ValueError("Debt is already settled or cancelled.")
         if amount_cents > debt.remaining_cents:
-            raise ValueError(
-                f"Settlement amount (${amount_cents / 100:.2f}) exceeds remaining balance (${debt.remaining_cents / 100:.2f})."
+            msg = (
+                f"Settlement amount (${amount_cents / 100:.2f}) "
+                f"exceeds remaining balance (${debt.remaining_cents / 100:.2f})."
             )
+            raise ValueError(msg)
 
         # Resolve settlement account
         if account_name:
@@ -230,3 +244,85 @@ class DebtService:
         if not user_id or not str(user_id).strip():
             raise ValueError("User ID cannot be empty.")
         return self.repo.get_debt_summary(user_id.strip())
+
+    def update_debt(self, debt_id: str, user_id: str, updates: Dict[str, Any]) -> DebtRecord:
+        """Update debt fields (counterparty, reason, due date, status, amounts, installments)."""
+        if not user_id or not str(user_id).strip():
+            raise ValueError("User ID cannot be empty.")
+        if not debt_id or not str(debt_id).strip():
+            raise ValueError("Debt ID cannot be empty.")
+
+        debt = self.repo.get_debt(debt_id)
+        if not debt:
+            raise ValueError(f"Debt with ID '{debt_id}' does not exist.")
+        if debt.user_id != user_id:
+            raise PermissionError("Unauthorized: debt belongs to another user.")
+
+        sanitized: Dict[str, Any] = {}
+        for k, v in updates.items():
+            if k in ("concept", "notes") and "reason" not in updates:
+                sanitized["reason"] = v
+            elif k == "amount" and v is not None:
+                sanitized["amount_cents"] = int(round(float(v) * 100))
+            else:
+                sanitized[k] = v
+
+        if "amount_cents" in sanitized:
+            new_amount = int(sanitized["amount_cents"])
+            if new_amount <= 0:
+                raise ValueError("Amount must be greater than zero.")
+            sanitized["remaining_cents"] = max(0, new_amount - debt.paid_amount_cents)
+            if debt.is_installment:
+                total_inst = sanitized.get("total_installments", debt.total_installments) or 1
+                sanitized["installment_amount_cents"] = new_amount // total_inst
+
+        return self.repo.update_debt(debt_id, user_id, sanitized)
+
+    def record_installment_payment(
+        self,
+        debt_id: str,
+        user_id: str,
+        installments_to_pay: int,
+        account_name: Optional[str] = None,
+        account_id: Optional[str] = None,
+        notes: Optional[str] = None,
+        payment_date: Optional[Union[datetime, str]] = None,
+    ) -> Dict[str, Any]:
+        """Apply an installment settlement payment (1 or more cuotas), updating debt & linked account."""
+        if not user_id or not str(user_id).strip():
+            raise ValueError("User ID cannot be empty.")
+        if installments_to_pay <= 0:
+            raise ValueError("Installments to pay must be greater than zero.")
+
+        debt = self.repo.get_debt(debt_id)
+        if not debt:
+            raise ValueError(f"Debt with ID '{debt_id}' does not exist.")
+        if debt.user_id != user_id:
+            raise PermissionError("Unauthorized: debt belongs to another user.")
+        if debt.status in (DebtStatus.SETTLED, DebtStatus.CANCELLED):
+            raise ValueError("Debt is already settled or cancelled.")
+
+        rem_inst = debt.remaining_installments if debt.remaining_installments is not None else 1
+        if installments_to_pay > rem_inst:
+            raise ValueError(f"Cannot pay {installments_to_pay} installments; only {rem_inst} remaining.")
+
+        # Resolve account
+        target_acc = None
+        if account_name:
+            target_acc = self._resolve_or_create_account(user_id, account_name, account_id)
+        elif debt.account_name or debt.account_id or account_id:
+            target_acc = self._resolve_or_create_account(
+                user_id, debt.account_name, account_id or debt.account_id
+            )
+
+        res = self.repo.execute_installment_settlement(
+            debt_id=debt_id,
+            user_id=user_id,
+            installments_to_pay=installments_to_pay,
+            account_id=target_acc.id if target_acc else None,
+            account_name=target_acc.name if target_acc else None,
+            notes=notes,
+            payment_date=payment_date,
+            adjust_account=True,
+        )
+        return res

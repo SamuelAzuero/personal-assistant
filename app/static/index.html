@@ -323,20 +323,58 @@
         </div>
       </div>
 
-      <!-- Widget de Ocio y Salidas -->
-      <div class="card widget-card">
+      <!-- Widget de Ocio y Salidas (Geo-Aware Colombian Outings & Recommendations) -->
+      <div class="card widget-card" id="outings-widget-card">
         <div class="card-header">
           <div class="widget-title-group">
             <span class="widget-icon">🍽️</span>
             <div>
               <h2 class="card-title">Planes y Restaurantes Recomendados</h2>
-              <p class="card-desc">Investigación de ocio y entretenimiento</p>
+              <p class="card-desc">Búsqueda geolocalizada por sector con navegación en Google Maps</p>
             </div>
           </div>
-          <span class="badge badge-info">Sugerencias Destacadas</span>
+          <span id="outings-count-badge" class="badge badge-info">Sugerencias Destacadas</span>
         </div>
-        <div class="widget-content" id="outings-list">
-          <div class="muted-row">Cargando recomendaciones...</div>
+
+        <!-- Barra de Filtros y Búsqueda por Sector -->
+        <div class="outings-filter-bar">
+          <div class="outings-filter-row">
+            <div class="outings-filter-group outings-col-sector">
+              <label for="outings-sector-select" class="filter-label">Sector / Zona</label>
+              <select id="outings-sector-select" class="form-select form-select-sm">
+                <option value="all">📍 Todos los sectores</option>
+                <option value="Chapinero" selected>Chapinero (Alto / Central)</option>
+                <option value="Usaquén">Usaquén</option>
+                <option value="Parque 93">Parque 93</option>
+                <option value="Zona G">Zona G (Gourmet)</option>
+                <option value="La Candelaria">La Candelaria (Centro Histórico)</option>
+                <option value="El Poblado">El Poblado (Medellín)</option>
+                <option value="Zona T">Zona T / Zona Rosa</option>
+                <option value="La Macarena">La Macarena</option>
+              </select>
+            </div>
+
+            <div class="outings-filter-group outings-col-search">
+              <label for="outings-search-input" class="filter-label">Tipo de Comida o Plan</label>
+              <div class="outings-search-input-wrap">
+                <input
+                  type="text"
+                  id="outings-search-input"
+                  class="form-input form-input-sm"
+                  placeholder="ej. café, sushi, parrilla, brunch, terraza..."
+                  aria-label="Buscar restaurantes o planes"
+                >
+                <button type="button" id="btn-search-outings" class="btn btn-primary btn-sm">
+                  <span>🔍</span> Buscar Lugares
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Contenedor Dinámico de Tarjetas de Lugares -->
+        <div class="widget-content" id="outings-list" aria-live="polite">
+          <div class="muted-row">Cargando recomendaciones en Bogotá...</div>
         </div>
       </div>
     </section>
@@ -555,9 +593,85 @@
           <input type="date" id="debt-due-date" name="due_date" class="form-input">
         </div>
 
+        <div class="form-group">
+          <label class="checkbox-container">
+            <input type="checkbox" id="debt-is-installment" name="is_installment">
+            <span class="checkbox-label">¿Es un préstamo o compra a cuotas?</span>
+          </label>
+        </div>
+
+        <div id="debt-installment-group" class="form-row hidden">
+          <div class="form-group form-col">
+            <label for="debt-total-installments">Número de Cuotas</label>
+            <input type="number" id="debt-total-installments" name="total_installments" min="2" max="72" value="6" class="form-input">
+          </div>
+          <div class="form-group form-col">
+            <label for="debt-payment-frequency">Frecuencia de Pago</label>
+            <select id="debt-payment-frequency" name="payment_frequency" class="form-select">
+              <option value="monthly" selected>Mensual</option>
+              <option value="biweekly">Quincenal</option>
+              <option value="weekly">Semanal</option>
+            </select>
+          </div>
+        </div>
+
         <div class="dialog-actions">
           <button type="button" class="btn btn-secondary" id="btn-cancel-debt">Cancelar</button>
           <button type="submit" class="btn btn-primary" id="btn-submit-debt">Guardar Registro</button>
+        </div>
+      </form>
+    </div>
+  </dialog>
+
+  <!-- Modal: Modificar Registro de Deuda (M12 / R3) -->
+  <dialog id="debt-edit-dialog" closedby="any" aria-labelledby="debt-edit-dialog-title" class="modal-dialog">
+    <div class="dialog-content">
+      <div class="dialog-header">
+        <h2 id="debt-edit-dialog-title" class="dialog-title">✏️ Modificar Deuda / Préstamo</h2>
+        <button type="button" class="btn-close" id="btn-close-debt-edit-dialog" aria-label="Cerrar ventana">&times;</button>
+      </div>
+      <form id="debt-edit-form" class="dialog-form">
+        <input type="hidden" id="debt-edit-id" name="debt_id">
+
+        <div class="form-row">
+          <div class="form-group form-col">
+            <label for="debt-edit-counterparty">Persona / Contraparte *</label>
+            <input type="text" id="debt-edit-counterparty" name="counterparty" required class="form-input" placeholder="ej. Juan Pérez">
+          </div>
+          <div class="form-group form-col">
+            <label for="debt-edit-amount">Monto Total ($ COP) *</label>
+            <input type="number" id="debt-edit-amount" name="amount" step="1000" min="1" required class="form-input" placeholder="ej. 50000">
+          </div>
+        </div>
+
+        <div class="form-group">
+          <label for="debt-edit-reason">Motivo / Concepto *</label>
+          <input type="text" id="debt-edit-reason" name="reason" required class="form-input" placeholder="ej. Préstamo personal o Almuerzo">
+        </div>
+
+        <div class="form-row">
+          <div class="form-group form-col">
+            <label for="debt-edit-due-date">Fecha Límite / Vencimiento</label>
+            <input type="date" id="debt-edit-due-date" name="due_date" class="form-input">
+          </div>
+          <div class="form-group form-col">
+            <label for="debt-edit-status">Estado del Registro *</label>
+            <select id="debt-edit-status" name="status" required class="form-select">
+              <option value="active">Activo (Pendiente)</option>
+              <option value="partially_paid">Abono Parcial</option>
+              <option value="settled">Liquidado / Pagado</option>
+              <option value="cancelled">Cancelado</option>
+            </select>
+          </div>
+        </div>
+
+        <div id="debt-edit-installment-callout" class="callout-box hidden">
+          <!-- Dynamically populated for installment debts -->
+        </div>
+
+        <div class="dialog-actions">
+          <button type="button" class="btn btn-secondary" id="btn-cancel-debt-edit">Cancelar</button>
+          <button type="submit" class="btn btn-primary" id="btn-submit-debt-edit">Guardar Cambios</button>
         </div>
       </form>
     </div>
@@ -602,6 +716,61 @@
         <div class="dialog-actions">
           <button type="button" class="btn btn-secondary" id="btn-cancel-settle">Cancelar</button>
           <button type="submit" class="btn btn-success" id="btn-submit-settle">Confirmar Pago</button>
+        </div>
+      </form>
+    </div>
+  </dialog>
+
+  <!-- Modal: Pagar Cuota(s) de Deuda o Préstamo (M12 / R3) -->
+  <dialog id="installment-pay-dialog" closedby="any" aria-labelledby="installment-pay-dialog-title" class="modal-dialog">
+    <div class="dialog-content">
+      <div class="dialog-header">
+        <h2 id="installment-pay-dialog-title" class="dialog-title">💳 Pagar Cuota(s) de Deuda</h2>
+        <button type="button" class="btn-close" id="btn-close-installment-dialog" aria-label="Cerrar ventana">&times;</button>
+      </div>
+      <form id="installment-pay-form" class="dialog-form">
+        <input type="hidden" id="inst-debt-id" name="debt_id">
+        <input type="hidden" id="inst-amount-per-cuota" name="installment_amount">
+        <input type="hidden" id="inst-remaining-count" name="remaining_installments">
+        <input type="hidden" id="inst-remaining-cents" name="remaining_cents">
+
+        <div id="installment-summary-box" class="callout-box">
+          <!-- Filled dynamically: counterparty, total cuotas, remaining cuotas, cuota COP, total balance -->
+        </div>
+
+        <div class="form-row">
+          <div class="form-group form-col">
+            <label for="inst-cuotas-to-pay">Número de Cuotas a Pagar *</label>
+            <select id="inst-cuotas-to-pay" name="installments_to_pay" class="form-select" required>
+              <option value="1">1 cuota</option>
+            </select>
+          </div>
+          <div class="form-group form-col">
+            <label for="inst-account">Cuenta para el Débito / Pago *</label>
+            <select id="inst-account" name="account" class="form-select" required>
+              <option value="Efectivo">💵 Efectivo</option>
+              <option value="Nequi" selected>📱 Nequi</option>
+              <option value="Nu">🟣 Nu</option>
+              <option value="Daviplata">🔴 Daviplata</option>
+              <option value="Bancolombia">🟡 Bancolombia</option>
+            </select>
+          </div>
+        </div>
+
+        <div class="payment-preview-box">
+          <span class="preview-label">Monto total a transferir / debitar:</span>
+          <span id="inst-calc-preview" class="preview-value text-primary font-weight-bold">$0 COP</span>
+          <small id="inst-calc-hint" class="form-hint">Selecciona las cuotas a pagar.</small>
+        </div>
+
+        <div class="form-group">
+          <label for="inst-notes">Notas / Referencia (Opcional)</label>
+          <input type="text" id="inst-notes" name="notes" placeholder="ej. Cuota 2 pagada por PSE" class="form-input">
+        </div>
+
+        <div class="dialog-actions">
+          <button type="button" class="btn btn-secondary" id="btn-cancel-installment">Cancelar</button>
+          <button type="submit" class="btn btn-primary" id="btn-submit-installment">Confirmar Pago de Cuotas</button>
         </div>
       </form>
     </div>
@@ -667,6 +836,75 @@
         <div class="dialog-actions">
           <button type="button" class="btn btn-secondary" id="btn-cancel-sub">Cancelar</button>
           <button type="submit" class="btn btn-primary" id="btn-submit-sub">Guardar Suscripción</button>
+        </div>
+      </form>
+    </div>
+  </dialog>
+
+  <!-- Modal: Operación Directa de Cuenta (Depósito / Retiro) -->
+  <dialog id="account-op-dialog" closedby="any" aria-labelledby="account-op-title" class="modal-dialog">
+    <div class="dialog-content">
+      <div class="dialog-header">
+        <h2 id="account-op-title" class="dialog-title">Operación de Cuenta</h2>
+        <button type="button" class="btn-close" id="btn-close-account-op-dialog" aria-label="Cerrar ventana">&times;</button>
+      </div>
+      <form id="account-op-form" class="dialog-form">
+        <!-- Hidden Inputs for Account Identification -->
+        <input type="hidden" id="account-op-account-id" name="account_id">
+        <input type="hidden" id="account-op-account-name" name="account_name">
+
+        <!-- Account Context Information Card -->
+        <div id="account-op-summary-box" class="callout-box">
+          <div style="display: flex; justify-content: space-between; align-items: center;">
+            <div>
+              <span style="font-size: 0.75rem; text-transform: uppercase; color: var(--text-muted); display: block;">Cuenta Seleccionada</span>
+              <strong id="account-op-target-name" style="font-size: 1.05rem; color: var(--text-main);">—</strong>
+            </div>
+            <div style="text-align: right;">
+              <span style="font-size: 0.75rem; text-transform: uppercase; color: var(--text-muted); display: block;">Saldo Actual</span>
+              <span id="account-op-current-balance" class="badge badge-info" style="font-size: 0.85rem;">$0 COP</span>
+            </div>
+          </div>
+        </div>
+
+        <!-- Operation Selector (Deposit vs Withdrawal) -->
+        <div class="form-group">
+          <label for="account-op-type">Tipo de Operación *</label>
+          <select id="account-op-type" name="operation" required class="form-select">
+            <option value="deposit" selected>➕ Depositar (Añadir fondos al saldo)</option>
+            <option value="withdraw">➖ Retirar (Extraer fondos del saldo)</option>
+          </select>
+        </div>
+
+        <!-- Amount Input in COP with Thousand Separators -->
+        <div class="form-group">
+          <label for="account-op-amount">Monto ($ COP) *</label>
+          <div class="input-currency-wrapper">
+            <input type="text" id="account-op-amount" name="amount_display"
+                   inputmode="numeric" placeholder="ej. 50.000" required class="form-input" autocomplete="off">
+            <input type="hidden" id="account-op-amount-raw" name="amount">
+          </div>
+          <small class="form-hint" id="account-op-amount-hint">Ingresa el monto en pesos colombianos (sin decimales).</small>
+        </div>
+
+        <!-- Concept / Reason -->
+        <div class="form-group">
+          <label for="account-op-concept">Concepto / Motivo *</label>
+          <input type="text" id="account-op-concept" name="concept"
+                 placeholder="ej. Recarga de saldo, Salario, Retiro cajero" required class="form-input">
+        </div>
+
+        <!-- Notes (Optional) -->
+        <div class="form-group">
+          <label for="account-op-notes">Notas / Comentarios (Opcional)</label>
+          <input type="text" id="account-op-notes" name="notes"
+                 placeholder="ej. Comprobante de consignación o detalle adicional" class="form-input">
+        </div>
+
+        <!-- Dialog Actions -->
+        <div class="dialog-actions">
+          <button type="button" class="btn btn-secondary" id="btn-cancel-account-op">Cancelar</button>
+          <button type="submit" class="btn btn-primary" id="btn-submit-account-op">Confirmar Operación</button>
         </div>
       </form>
     </div>

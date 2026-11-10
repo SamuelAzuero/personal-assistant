@@ -7,11 +7,11 @@ from fastapi import APIRouter, Depends, Header, HTTPException, Request, status
 
 from app.config import get_settings
 from app.core.audio import AudioNoteHandler
-from app.core.intent_parser import IntentParser
+from app.core.intent_parser import IntentParser, IntentResult, IntentType
 from app.core.router import ToolRouter
 from app.core.session_manager import SessionManager
 from app.database.connection import DatabaseManager, get_default_manager
-from app.integrations.telegram_client import TelegramClient
+from app.integrations.telegram_client import TelegramClient, TelegramLocation
 from app.database.repositories.calendar_repo import CalendarRepository
 from app.database.repositories.task_repo import TaskRepository
 from app.services.calendar_service import CalendarService
@@ -214,7 +214,8 @@ async def telegram_webhook(
                     target_client.mock_mode = False
                 res = target_client.send_message(str(chat_id_to_send), text_to_send, reply_markup=reply_markup)
                 import logging
-                logging.getLogger(__name__).info("Dispatched Telegram reply to %s: %s", chat_id_to_send, res.get("ok") if isinstance(res, dict) else res)
+                ok_val = res.get("ok") if isinstance(res, dict) else res
+                logging.getLogger(__name__).info("Dispatched Telegram reply to %s: %s", chat_id_to_send, ok_val)
             except Exception as e:
                 import logging
                 logging.getLogger(__name__).error("Failed to send telegram reply to %s: %s", chat_id_to_send, e)
@@ -286,9 +287,86 @@ async def telegram_webhook(
                 except Exception as e:
                     err_msg = str(e)
                     if "could not transcribe" not in err_msg.lower() and "re-record" not in err_msg.lower():
-                        err_msg = f"⚠️ Could not transcribe voice note: {err_msg}. Please re-record or type your request."
+                        err_msg = (
+                            f"⚠️ Could not transcribe voice note: {err_msg}. "
+                            "Please re-record or type your request."
+                        )
                     _send_telegram_reply(chat_id, err_msg)
                     return {"status": "error", "ok": True, "error": err_msg}
+
+    # 3.5. Location Sharing Processing
+    loc = getattr(update.message, "location", None)
+    if not loc and isinstance(update.message.raw_message, dict):
+        raw_loc = update.message.raw_message.get("location")
+        if raw_loc and isinstance(raw_loc, dict):
+            try:
+                loc = TelegramLocation(latitude=float(raw_loc["latitude"]), longitude=float(raw_loc["longitude"]))
+            except (TypeError, ValueError, KeyError):
+                loc = None
+    if not loc and isinstance(payload.get("message"), dict):
+        raw_loc = payload["message"].get("location")
+        if raw_loc and isinstance(raw_loc, dict):
+            try:
+                loc = TelegramLocation(latitude=float(raw_loc["latitude"]), longitude=float(raw_loc["longitude"]))
+            except (TypeError, ValueError, KeyError):
+                loc = None
+
+    if loc:
+        lat = float(loc["latitude"] if isinstance(loc, dict) else loc.latitude)
+        lon = float(loc["longitude"] if isinstance(loc, dict) else loc.longitude)
+        if not (-90.0 <= lat <= 90.0 and -180.0 <= lon <= 180.0):
+            err_msg = "⚠️ Coordenadas GPS fuera del rango válido: lat en [-90, 90], lon en [-180, 180]."
+            _send_telegram_reply(chat_id, err_msg)
+            return {"status": "error", "ok": True, "error": err_msg}
+
+        # Ensure user exists in SQLite users table
+        db_mgr = None
+        if hasattr(request.app.state, "db") and request.app.state.db is not None:
+            db_mgr = DatabaseManager(conn=request.app.state.db)
+        else:
+            db_mgr = get_default_manager()
+        try:
+            with db_mgr.connection() as conn:
+                conn.execute(
+                    "INSERT OR IGNORE INTO users (user_id, telegram_chat_id, full_name) VALUES (?, ?, ?);",
+                    (str(user_id), str(chat_id), update.message.user_name or f"User_{user_id}"),
+                )
+                conn.commit()
+        except Exception:
+            pass
+
+        # Synthesize outing intent for location share
+        intent_result = IntentResult(
+            intent=IntentType.OUTING_RESEARCH,
+            confidence=1.0,
+            slots={
+                "query": user_text or "restaurantes y planes",
+                "location": "tu ubicación actual",
+                "coordinates": (lat, lon),
+                "latitude": lat,
+                "longitude": lon,
+            },
+            is_complete=True,
+            missing_slots=[],
+            raw_text=user_text or "planes cerca",
+        )
+        response_text = tool_router.dispatch(user_id, intent_result)
+        session_manager.add_message(user_id, "user", f"[Ubicación compartida: {lat}, {lon}]")
+        session_manager.add_message(user_id, "assistant", response_text)
+        keyboard = (
+            telegram_client.build_default_quick_keyboard()
+            if hasattr(telegram_client, "build_default_quick_keyboard")
+            else None
+        )
+        _send_telegram_reply(chat_id, response_text, reply_markup=keyboard)
+        return {
+            "status": "ok",
+            "ok": True,
+            "chat_id": chat_id,
+            "message_id": update.message.message_id,
+            "intent": intent_result.intent.value,
+            "response": response_text,
+        }
 
     # Handle empty or whitespace-only messages
     if not user_text or not user_text.strip():

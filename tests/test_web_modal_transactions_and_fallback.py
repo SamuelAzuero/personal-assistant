@@ -506,3 +506,81 @@ class TestWebFrontendMarkupAndScriptIntegrity:
         assert acc_restored.balance_cents == 10000000
         assert acc_restored.balance == 100000.0
 
+    def test_index_html_has_account_op_dialog(self):
+        """Verify index.html contains #account-op-dialog with required fields and closedby='any'."""
+        index_file = REPO_ROOT / "app" / "static" / "index.html"
+        content = index_file.read_text(encoding="utf-8")
+        assert 'id="account-op-dialog"' in content
+        assert 'closedby="any"' in content
+        assert 'id="account-op-form"' in content
+        assert 'id="account-op-type"' in content
+        assert 'id="account-op-amount"' in content
+        assert 'id="account-op-concept"' in content
+        assert 'id="account-op-notes"' in content
+        assert 'id="btn-submit-account-op"' in content
+        assert 'id="btn-cancel-account-op"' in content
+        assert 'btn-close' in content
+
+    def test_app_js_has_account_cards_action_buttons_and_operation_logic(self):
+        """Verify app.js adds interactive buttons to account cards and handles account-op submissions."""
+        js_file = REPO_ROOT / "app" / "static" / "js" / "app.js"
+        content = js_file.read_text(encoding="utf-8")
+        assert "btn-account-op" in content
+        assert "data-id=" in content
+        assert "data-name=" in content
+        assert "data-balance=" in content
+        assert "data-action=" in content
+        assert "accountOpDialog" in content
+        assert "btn-submit-account-op" in content
+        assert "/api/finance/accounts/" in content
+        assert "/operations" in content
+        assert "refreshDashboard" in content
+
+    def test_direct_account_operations_api_deposit_and_withdraw(self, api_client, account_service):
+        """Verify POST /api/finance/accounts/{id}/operations performs direct deposits and withdrawals."""
+        user_id = "test_user_account_ops"
+        account_service.ensure_default_accounts(user_id)
+        bancolombia = account_service.get_account_by_name(user_id, "Bancolombia")
+        account_service.set_balance(bancolombia.id, 5000000)  # 50,000 COP
+
+        # 1. Deposit 25,000 COP
+        dep_resp = api_client.post(
+            f"/api/finance/accounts/{bancolombia.id}/operations?user_id={user_id}",
+            json={
+                "action": "deposit",
+                "amount_cents": 2500000,
+                "concept": "Abono freelance",
+                "notes": "Honorarios proyecto",
+            },
+        )
+        assert dep_resp.status_code == 200
+        dep_data = dep_resp.json()
+        assert dep_data["success"] is True
+        assert dep_data["operation"] == "deposit"
+        assert dep_data["new_balance_cents"] == 7500000
+
+        acc = account_service.get_account(bancolombia.id)
+        assert acc.balance_cents == 7500000
+        assert acc.balance == 75000.0
+
+        # 2. Withdraw 30,000 COP
+        with_resp = api_client.post(
+            f"/api/finance/accounts/{bancolombia.id}/operations?user_id={user_id}",
+            json={
+                "action": "withdraw",
+                "amount_cents": 3000000,
+                "concept": "Retiro cajero",
+                "notes": "Efectivo para compras",
+            },
+        )
+        assert with_resp.status_code == 200
+        with_data = with_resp.json()
+        assert with_data["success"] is True
+        assert with_data["operation"] == "withdraw"
+        assert with_data["new_balance_cents"] == 4500000
+
+        acc = account_service.get_account(bancolombia.id)
+        assert acc.balance_cents == 4500000
+        assert acc.balance == 45000.0
+
+

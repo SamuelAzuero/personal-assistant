@@ -12,8 +12,9 @@ spec:
     metadata:
       annotations:
         # Scale to zero when idle for 100% free tier zero cost
+        # Strictly enforce maxScale 1 to guarantee single-writer SQLite integrity
         autoscaling.knative.dev/minScale: "0"
-        autoscaling.knative.dev/maxScale: "2"
+        autoscaling.knative.dev/maxScale: "1"
         run.googleapis.com/execution-environment: gen2
         run.googleapis.com/cpu-throttling: "true"
     spec:
@@ -71,4 +72,5 @@ spec:
           csi:
             driver: gcsfuse.run.googleapis.com
             volumeAttributes:
-              bucketName: personal-assistant-data-bucket
+              bucketName: personal-assistant-data-435709049712
+              mountOptions: "uid=1001,gid=1001,file-mode=0700,dir-mode=0700"

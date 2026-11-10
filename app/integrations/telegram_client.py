@@ -23,21 +23,53 @@ class TelegramVoice:
     file_size: Optional[int] = None
 
 
+class TelegramLocation(dict):
+    """Represents GPS coordinates shared in Telegram, accessible as dict or attributes."""
+
+    def __init__(
+        self,
+        latitude: float,
+        longitude: float,
+        live_period: Optional[int] = None,
+        **kwargs: Any,
+    ) -> None:
+        super().__init__(latitude=float(latitude), longitude=float(longitude), **kwargs)
+        if live_period is not None:
+            self["live_period"] = live_period
+
+    @property
+    def latitude(self) -> float:
+        return float(self["latitude"])
+
+    @property
+    def longitude(self) -> float:
+        return float(self["longitude"])
+
+    @property
+    def live_period(self) -> Optional[int]:
+        return self.get("live_period")
+
+
 @dataclass
 class TelegramMessage:
-    """Unified envelope for incoming Telegram text and voice messages."""
+    """Unified envelope for incoming Telegram text, voice, and location messages."""
 
     message_id: int
     chat_id: str
     user_id: str
     text: Optional[str] = None
     voice: Optional[TelegramVoice] = None
+    location: Optional[Dict[str, float]] = None
     date: int = 0
     raw_message: Dict[str, Any] = field(default_factory=dict)
 
     @property
     def is_voice(self) -> bool:
         return self.voice is not None
+
+    @property
+    def is_location(self) -> bool:
+        return self.location is not None
 
 
 @dataclass
@@ -108,12 +140,25 @@ class TelegramClient(TelegramClientProtocol):
                 file_size=v.get("file_size"),
             )
 
+        location = None
+        loc_dict = msg_dict.get("location")
+        if loc_dict and isinstance(loc_dict, dict):
+            try:
+                location = TelegramLocation(
+                    latitude=float(loc_dict["latitude"]),
+                    longitude=float(loc_dict["longitude"]),
+                    live_period=loc_dict.get("live_period"),
+                )
+            except (TypeError, ValueError, KeyError):
+                location = None
+
         envelope = TelegramMessage(
             message_id=message_id,
             chat_id=chat_id,
             user_id=user_id,
             text=text,
             voice=voice,
+            location=location,
             date=msg_dict.get("date", 0) if isinstance(msg_dict.get("date"), int) else 0,
             raw_message=msg_dict,
         )

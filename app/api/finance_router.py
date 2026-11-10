@@ -59,7 +59,8 @@ def _get_active_db_manager() -> DatabaseManager:
 
 
 def get_effective_user_id(user_id: Optional[str] = None) -> str:
-    """Resolve effective user_id: if 'default_user' has no data, fallback to active Telegram user or active transactions."""
+    """Resolve effective user_id: if 'default_user' has no data,
+    fallback to active Telegram user or active transactions."""
     raw_user = (user_id or "").strip()
     eff_user = raw_user if raw_user else "default_user"
     if eff_user == "default_user":
@@ -498,6 +499,67 @@ class TransferRequest(BaseModel):
     user_id: Optional[str] = "default_user"
 
 
+class AccountOperationRequest(BaseModel):
+    action: Optional[str] = Field(None, description="Operation action: 'deposit' or 'withdraw'")
+    operation: Optional[str] = Field(None, description="Operation alias")
+    amount_cents: Optional[int] = Field(None, description="Amount in COP cents (positive integer)")
+    amount: Optional[Decimal] = Field(None, description="Amount in standard currency (COP)")
+    concept: Optional[str] = Field(None, description="Operation concept or description")
+    notes: Optional[str] = Field(None, description="Optional extra notes")
+    category: Optional[str] = Field(None, description="Optional transaction category")
+    user_id: Optional[str] = Field("default_user", description="User ID")
+
+    @model_validator(mode="before")
+    @classmethod
+    def validate_operation(cls, values: Any) -> Any:
+        if not isinstance(values, dict):
+            return values
+
+        raw_act = values.get("action") or values.get("operation")
+        clean_act = str(raw_act).strip().lower() if raw_act else None
+        if clean_act and clean_act not in ("deposit", "withdraw"):
+            raise ValueError("Invalid action: must be 'deposit' or 'withdraw'.")
+        if clean_act:
+            values["action"] = clean_act
+            values["operation"] = clean_act
+
+        amt = values.get("amount")
+        amt_cents = values.get("amount_cents")
+        if amt is None and amt_cents is None:
+            raise ValueError("Operation amount must be specified.")
+
+        resolved_cents: Optional[int] = None
+        if amt_cents is not None:
+            if not isinstance(amt_cents, int):
+                raise ValueError("amount_cents must be an integer.")
+            if amt_cents <= 0:
+                raise ValueError(
+                    "Deposit amount must be greater than zero."
+                    if clean_act == "deposit"
+                    else "Withdrawal amount must be greater than zero."
+                )
+            resolved_cents = amt_cents
+
+        if amt is not None:
+            try:
+                dec = Decimal(str(amt).strip())
+            except Exception:
+                raise ValueError("Invalid numeric format for operation amount.")
+            if dec <= Decimal("0"):
+                raise ValueError(
+                    "Deposit amount must be greater than zero."
+                    if clean_act == "deposit"
+                    else "Withdrawal amount must be greater than zero."
+                )
+            cents_from_amt = int(round(dec * 100))
+            if resolved_cents is not None and resolved_cents != cents_from_amt:
+                raise ValueError("amount and amount_cents are contradictory.")
+            resolved_cents = cents_from_amt
+            values["amount_cents"] = resolved_cents
+
+        return values
+
+
 class DebtCreateRequest(BaseModel):
     counterparty: str = Field(..., min_length=1)
     amount: Optional[Decimal] = None
@@ -512,11 +574,42 @@ class DebtCreateRequest(BaseModel):
     account_id: Optional[str] = None
     user_id: Optional[str] = "default_user"
     adjust_account_balance: Optional[bool] = True
+    is_installment: Optional[bool] = False
+    total_installments: Optional[int] = 1
+    payment_frequency: Optional[str] = "monthly"
+    next_installment_due_date: Optional[str] = None
 
 
 class DebtSettleRequest(BaseModel):
     amount: Optional[Decimal] = None
     amount_cents: Optional[int] = None
+    account: Optional[str] = None
+    account_name: Optional[str] = None
+    account_id: Optional[str] = None
+    notes: Optional[str] = None
+    user_id: Optional[str] = "default_user"
+
+
+class DebtUpdateRequest(BaseModel):
+    counterparty: Optional[str] = None
+    amount: Optional[Decimal] = None
+    amount_cents: Optional[int] = None
+    reason: Optional[str] = None
+    concept: Optional[str] = None
+    notes: Optional[str] = None
+    due_date: Optional[str] = None
+    status: Optional[str] = None
+    account: Optional[str] = None
+    account_name: Optional[str] = None
+    account_id: Optional[str] = None
+    payment_frequency: Optional[str] = None
+    total_installments: Optional[int] = None
+    remaining_installments: Optional[int] = None
+    user_id: Optional[str] = "default_user"
+
+
+class InstallmentPaymentRequest(BaseModel):
+    installments_to_pay: int = Field(..., description="Number of installments to pay (>= 1)")
     account: Optional[str] = None
     account_name: Optional[str] = None
     account_id: Optional[str] = None
@@ -651,6 +744,100 @@ def execute_transfer(
         raise HTTPException(status_code=400, detail=str(e))
 
 
+@router.post("/api/finance/accounts/{account_id}/operations", status_code=status.HTTP_200_OK)
+@router.post("/api/accounts/{account_id}/operations", status_code=status.HTTP_200_OK)
+@router.post("/accounts/{account_id}/operations", status_code=status.HTTP_200_OK)
+def execute_account_operation(
+    account_id: str,
+    payload: AccountOperationRequest,
+    user_id: Optional[str] = Query(None),
+    service: AccountService = Depends(get_account_service),
+) -> Dict[str, Any]:
+    """Execute direct deposit or withdrawal on an account."""
+    eff_user = get_effective_user_id(user_id or payload.user_id)
+    service.ensure_default_accounts(eff_user)
+
+    amt_cents = payload.amount_cents
+    if amt_cents is None or amt_cents <= 0:
+        raise HTTPException(status_code=400, detail="Amount must be greater than zero.")
+
+    action = (payload.action or payload.operation or "").lower().strip()
+    if action not in ("deposit", "withdraw"):
+        raise HTTPException(
+            status_code=400,
+            detail="Operation action must be specified ('deposit' or 'withdraw').",
+        )
+
+    try:
+        if action == "deposit":
+            result = service.deposit(
+                user_id=eff_user,
+                account_id_or_name=account_id,
+                amount_cents=amt_cents,
+                concept=payload.concept or "Depósito",
+                notes=payload.notes,
+                category=payload.category,
+            )
+        elif action == "withdraw":
+            result = service.withdraw(
+                user_id=eff_user,
+                account_id_or_name=account_id,
+                amount_cents=amt_cents,
+                concept=payload.concept or "Retiro",
+                notes=payload.notes,
+                category=payload.category,
+            )
+        else:
+            raise HTTPException(status_code=400, detail=f"Invalid action '{action}'.")
+
+        return result
+    except ValueError as e:
+        msg = str(e)
+        if "not found" in msg.lower():
+            raise HTTPException(status_code=404, detail=msg)
+        raise HTTPException(status_code=400, detail=msg)
+
+
+@router.post("/api/finance/accounts/{account_id}/deposit", status_code=status.HTTP_200_OK)
+@router.post("/api/accounts/{account_id}/deposit", status_code=status.HTTP_200_OK)
+@router.post("/accounts/{account_id}/deposit", status_code=status.HTTP_200_OK)
+def deposit_to_account(
+    account_id: str,
+    payload: AccountOperationRequest,
+    user_id: Optional[str] = Query(None),
+    service: AccountService = Depends(get_account_service),
+) -> Dict[str, Any]:
+    """Convenience alias endpoint for direct account deposits."""
+    payload.action = "deposit"
+    payload.operation = "deposit"
+    return execute_account_operation(
+        account_id=account_id,
+        payload=payload,
+        user_id=user_id,
+        service=service,
+    )
+
+
+@router.post("/api/finance/accounts/{account_id}/withdraw", status_code=status.HTTP_200_OK)
+@router.post("/api/accounts/{account_id}/withdraw", status_code=status.HTTP_200_OK)
+@router.post("/accounts/{account_id}/withdraw", status_code=status.HTTP_200_OK)
+def withdraw_from_account(
+    account_id: str,
+    payload: AccountOperationRequest,
+    user_id: Optional[str] = Query(None),
+    service: AccountService = Depends(get_account_service),
+) -> Dict[str, Any]:
+    """Convenience alias endpoint for direct account withdrawals."""
+    payload.action = "withdraw"
+    payload.operation = "withdraw"
+    return execute_account_operation(
+        account_id=account_id,
+        payload=payload,
+        user_id=user_id,
+        service=service,
+    )
+
+
 # --- Debts & Receivables Endpoints ---
 
 @router.get("/api/finance/debts")
@@ -723,13 +910,126 @@ def create_debt(
             due_date=payload.due_date,
             account_name=payload.account or payload.account_name,
             account_id=payload.account_id,
-            adjust_account_balance=payload.adjust_account_balance if payload.adjust_account_balance is not None else True,
+            adjust_account_balance=(
+                payload.adjust_account_balance if payload.adjust_account_balance is not None else True
+            ),
+            is_installment=bool(payload.is_installment),
+            total_installments=payload.total_installments or 1,
+            payment_frequency=payload.payment_frequency or "monthly",
+            next_installment_due_date=payload.next_installment_due_date,
         )
         debt_dict = record.to_dict()
         debt_dict["debt"] = record.to_dict()
         return debt_dict
     except ValueError as e:
         raise HTTPException(status_code=422, detail=str(e))
+
+
+@router.patch("/api/finance/debts/{debt_id}")
+@router.patch("/api/debts/{debt_id}")
+@router.patch("/debts/{debt_id}")
+def update_debt_endpoint(
+    debt_id: str,
+    payload: DebtUpdateRequest,
+    user_id: Optional[str] = Query(None),
+    service: DebtService = Depends(get_debt_service),
+) -> Dict[str, Any]:
+    """Update debt parameters (counterparty, amount, reason, due date, status)."""
+    eff_user = get_effective_user_id(user_id or payload.user_id)
+    debt = service.get_debt(debt_id)
+    if not debt:
+        raise HTTPException(status_code=404, detail=f"Debt '{debt_id}' not found.")
+    if debt.user_id != eff_user:
+        raise HTTPException(status_code=403, detail="Unauthorized: debt belongs to another user.")
+
+    updates: Dict[str, Any] = {}
+    if payload.counterparty is not None:
+        updates["counterparty"] = payload.counterparty
+    if payload.reason is not None:
+        updates["reason"] = payload.reason
+    elif payload.concept is not None:
+        updates["reason"] = payload.concept
+    elif payload.notes is not None:
+        updates["reason"] = payload.notes
+
+    if payload.amount_cents is not None:
+        updates["amount_cents"] = payload.amount_cents
+    elif payload.amount is not None:
+        try:
+            updates["amount_cents"] = int(round(float(payload.amount) * 100))
+        except Exception:
+            raise HTTPException(status_code=400, detail="Invalid debt amount.")
+
+    if payload.due_date is not None:
+        updates["due_date"] = payload.due_date
+    if payload.status is not None:
+        updates["status"] = payload.status
+    if payload.account or payload.account_name:
+        updates["account_name"] = payload.account or payload.account_name
+    if payload.account_id:
+        updates["account_id"] = payload.account_id
+    if payload.payment_frequency is not None:
+        updates["payment_frequency"] = payload.payment_frequency
+    if payload.total_installments is not None:
+        updates["total_installments"] = payload.total_installments
+    if payload.remaining_installments is not None:
+        updates["remaining_installments"] = payload.remaining_installments
+
+    try:
+        updated = service.update_debt(debt_id, eff_user, updates)
+        return {"success": True, "debt": updated.to_dict()}
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    except PermissionError as e:
+        raise HTTPException(status_code=403, detail=str(e))
+
+
+@router.post("/api/finance/debts/{debt_id}/installments/pay")
+@router.post("/api/debts/{debt_id}/installments/pay")
+@router.post("/debts/{debt_id}/installments/pay")
+def pay_installment_endpoint(
+    debt_id: str,
+    payload: InstallmentPaymentRequest,
+    user_id: Optional[str] = Query(None),
+    service: DebtService = Depends(get_debt_service),
+) -> Dict[str, Any]:
+    """Execute payment of one or more installments on a structured debt."""
+    if payload.installments_to_pay <= 0:
+        raise HTTPException(status_code=400, detail="Installments to pay must be greater than zero.")
+
+    eff_user = get_effective_user_id(user_id or payload.user_id)
+    debt = service.get_debt(debt_id)
+    if not debt:
+        raise HTTPException(status_code=404, detail=f"Debt '{debt_id}' not found.")
+    if debt.user_id != eff_user:
+        raise HTTPException(status_code=403, detail="Unauthorized: debt belongs to another user.")
+    if debt.status in ("settled", "cancelled"):
+        raise HTTPException(status_code=400, detail="Debt is already settled or cancelled.")
+
+    rem_inst = debt.remaining_installments if debt.remaining_installments is not None else 1
+    if payload.installments_to_pay > rem_inst:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Cannot pay {payload.installments_to_pay} installments; only {rem_inst} remaining.",
+        )
+
+    account = payload.account or payload.account_name
+    account_id = payload.account_id
+
+    try:
+        res = service.record_installment_payment(
+            debt_id=debt_id,
+            user_id=eff_user,
+            installments_to_pay=payload.installments_to_pay,
+            account_name=account,
+            account_id=account_id,
+            notes=payload.notes,
+        )
+        return res
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    except PermissionError as e:
+        raise HTTPException(status_code=403, detail=str(e))
 
 
 @router.post("/api/finance/debts/{debt_id}/settle")

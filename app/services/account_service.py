@@ -180,6 +180,135 @@ class AccountService:
             "net_worth": self.get_net_worth(user_id),
         }
 
+    def record_operation(
+        self,
+        user_id: str,
+        account_id_or_name: str,
+        amount_cents: int,
+        action: str,
+        concept: Optional[str] = None,
+        notes: Optional[str] = None,
+        category: Optional[str] = None,
+    ) -> Dict[str, Any]:
+        """Atomically credit or debit an account and log corresponding ledger transaction."""
+        if not user_id or not str(user_id).strip():
+            raise ValueError("User ID cannot be empty.")
+        clean_uid = user_id.strip()
+
+        if not isinstance(amount_cents, int):
+            raise ValueError("amount_cents must be an integer.")
+
+        act = (action or "").strip().lower()
+        if act not in ("deposit", "withdraw"):
+            raise ValueError("Invalid operation action: must be 'deposit' or 'withdraw'.")
+
+        if amount_cents <= 0:
+            if act == "deposit":
+                raise ValueError("Deposit amount must be greater than zero.")
+            else:
+                raise ValueError("Withdrawal amount must be greater than zero.")
+
+        self.ensure_default_accounts(clean_uid)
+        acc = self._resolve_account(clean_uid, account_id_or_name)
+
+        pre_nw = self.get_net_worth(clean_uid)["total_net_worth_cents"]
+
+        if act == "deposit":
+            delta = amount_cents
+            t_type = "income"
+            clean_concept = (concept or "Depósito").strip()
+            if not category or not str(category).strip():
+                resolved_category = (
+                    "Salary"
+                    if ("sueldo" in clean_concept.lower() or "salario" in clean_concept.lower())
+                    else "Income"
+                )
+            else:
+                resolved_category = category.strip()
+        else:
+            delta = -amount_cents
+            t_type = "expense"
+            clean_concept = (concept or "Retiro").strip()
+            if not category or not str(category).strip():
+                resolved_category = "Cash" if "efectivo" in acc.name.lower() else "General"
+            else:
+                resolved_category = category.strip()
+
+        clean_notes = notes.strip() if notes and str(notes).strip() else None
+        if clean_notes and clean_notes not in clean_concept:
+            full_description = f"{clean_concept} - {clean_notes}"
+        else:
+            full_description = clean_concept
+
+        updated_acc, tx_dict = self.repo.execute_balance_operation(
+            user_id=clean_uid,
+            account_id=acc.id,
+            delta_cents=delta,
+            transaction_type=t_type,
+            category=resolved_category,
+            description=full_description,
+        )
+
+        post_nw_dict = self.get_net_worth(clean_uid)
+        post_nw = post_nw_dict["total_net_worth_cents"]
+        expected_nw = pre_nw + delta
+        if post_nw != expected_nw:
+            raise RuntimeError(
+                f"Net worth invariance check failed: pre={pre_nw}, post={post_nw}, expected={expected_nw}"
+            )
+
+        return {
+            "success": True,
+            "operation": act,
+            "account": updated_acc.to_dict(),
+            "amount_cents": amount_cents,
+            "new_balance_cents": updated_acc.balance_cents,
+            "net_worth": post_nw_dict,
+            "total_net_worth_cents": post_nw,
+            "total_net_worth": post_nw_dict["total_net_worth"],
+            "transaction": tx_dict,
+        }
+
+    def deposit(
+        self,
+        user_id: str,
+        account_id_or_name: str,
+        amount_cents: int,
+        concept: str = "Depósito",
+        notes: Optional[str] = None,
+        category: Optional[str] = None,
+    ) -> Dict[str, Any]:
+        """Atomically deposit COP cents into account, creating an income transaction and updating net worth."""
+        return self.record_operation(
+            user_id=user_id,
+            account_id_or_name=account_id_or_name,
+            amount_cents=amount_cents,
+            action="deposit",
+            concept=concept,
+            notes=notes,
+            category=category,
+        )
+
+    def withdraw(
+        self,
+        user_id: str,
+        account_id_or_name: str,
+        amount_cents: int,
+        concept: str = "Retiro",
+        notes: Optional[str] = None,
+        category: Optional[str] = None,
+    ) -> Dict[str, Any]:
+        """Atomically withdraw COP cents from account, creating an expense transaction and updating net worth."""
+        return self.record_operation(
+            user_id=user_id,
+            account_id_or_name=account_id_or_name,
+            amount_cents=amount_cents,
+            action="withdraw",
+            concept=concept,
+            notes=notes,
+            category=category,
+        )
+
     def get_net_worth(self, user_id: str) -> Dict[str, Any]:
         """Calculate total net worth and asset allocation percentages across all active accounts."""
         if not user_id or not str(user_id).strip():

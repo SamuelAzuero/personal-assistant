@@ -664,6 +664,54 @@ dialog::backdrop {
   transition: width 0.3s ease;
 }
 
+/* ================= Account Card Action Buttons ================= */
+.account-actions {
+  display: flex;
+  gap: 0.5rem;
+  margin-top: 0.85rem;
+  padding-top: 0.75rem;
+  border-top: 1px solid var(--border-subtle);
+}
+
+.account-actions .btn {
+  flex: 1;
+  font-size: 0.75rem;
+  padding: 0.35rem 0.5rem;
+  font-weight: 600;
+  border-radius: var(--radius-sm);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.25rem;
+  transition: all 0.15s ease-in-out;
+  cursor: pointer;
+}
+
+.btn-outline-success {
+  background: transparent;
+  color: var(--color-success);
+  border: 1px solid rgba(16, 185, 129, 0.4);
+}
+.btn-outline-success:hover {
+  background: var(--color-success);
+  color: #ffffff;
+}
+
+.btn-outline-danger {
+  background: transparent;
+  color: var(--color-danger);
+  border: 1px solid rgba(239, 68, 68, 0.4);
+}
+.btn-outline-danger:hover {
+  background: var(--color-danger);
+  color: #ffffff;
+}
+
+.input-currency-wrapper {
+  position: relative;
+  width: 100%;
+}
+
 .debts-section {
   margin-bottom: 2rem;
 }
@@ -870,3 +918,305 @@ dialog::backdrop {
     padding: 1rem;
   }
 }
+
+/* ================= M12: Debt Installments & Action Buttons ================= */
+.debt-installment-status {
+  display: flex;
+  flex-direction: column;
+  gap: 0.3rem;
+  min-width: 120px;
+}
+
+.debt-progress-container {
+  width: 100%;
+  height: 6px;
+  background-color: var(--bg-input);
+  border-radius: 9999px;
+  overflow: hidden;
+  border: 1px solid var(--border-subtle);
+}
+
+.debt-progress-bar {
+  height: 100%;
+  border-radius: 9999px;
+  transition: width 0.3s ease;
+}
+
+.debt-progress-bar.bg-primary {
+  background-color: var(--color-primary);
+}
+
+.debt-progress-bar.bg-success {
+  background-color: var(--color-success);
+}
+
+.debt-action-buttons {
+  display: inline-flex;
+  gap: 0.35rem;
+  justify-content: center;
+  align-items: center;
+  flex-wrap: wrap;
+}
+
+.debt-sub-info {
+  font-size: 0.725rem;
+  color: var(--text-muted);
+  display: block;
+  margin-top: 2px;
+}
+
+.payment-preview-box {
+  background-color: var(--bg-card-hover);
+  border: 1px dashed var(--border-color);
+  border-radius: var(--radius-sm);
+  padding: 0.85rem 1rem;
+  margin: 0.85rem 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+}
+
+.payment-preview-box .preview-label {
+  font-size: 0.8rem;
+  color: var(--text-muted);
+}
+
+.payment-preview-box .preview-value {
+  font-size: 1.25rem;
+  font-weight: 700;
+  color: var(--color-primary);
+}
+
+.badge-installment {
+  background-color: rgba(99, 102, 241, 0.15);
+  color: #6366f1;
+  border: 1px solid rgba(99, 102, 241, 0.25);
+  font-weight: 600;
+}
+
+/* ==============================================================================
+   M13: Outings & Recommendations UI Styles
+   ============================================================================== */
+
+.outings-filter-bar {
+  padding: 0.85rem 1rem;
+  background-color: rgba(31, 43, 68, 0.4);
+  border-bottom: 1px solid var(--border-subtle);
+  margin-bottom: 0.75rem;
+}
+
+.outings-filter-row {
+  display: flex;
+  gap: 0.85rem;
+  align-items: flex-end;
+  flex-wrap: wrap;
+}
+
+.outings-filter-group {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+}
+
+.outings-col-sector {
+  flex: 0 0 200px;
+}
+
+.outings-col-search {
+  flex: 1;
+  min-width: 220px;
+}
+
+.filter-label {
+  font-size: 0.75rem;
+  font-weight: 600;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.outings-search-input-wrap {
+  display: flex;
+  gap: 0.5rem;
+}
+
+.outings-search-input-wrap .form-input {
+  flex: 1;
+}
+
+.venue-cards-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0.85rem;
+}
+
+.venue-card {
+  background-color: var(--bg-input);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-md);
+  padding: 0.95rem 1.1rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.65rem;
+  transition: transform 0.15s ease, border-color 0.15s ease, box-shadow 0.15s ease;
+}
+
+.venue-card:hover {
+  transform: translateY(-1px);
+  border-color: var(--color-primary);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.25);
+}
+
+.venue-card-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 0.75rem;
+}
+
+.venue-title-group {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+}
+
+.venue-name {
+  font-size: 1.05rem;
+  font-weight: 700;
+  color: var(--text-main);
+  line-height: 1.25;
+}
+
+.venue-badges {
+  display: flex;
+  gap: 0.4rem;
+  flex-wrap: wrap;
+}
+
+.venue-badge {
+  font-size: 0.7rem;
+  padding: 0.15rem 0.5rem;
+}
+
+.venue-meta-rating {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 0.2rem;
+  min-width: 65px;
+}
+
+.venue-rating {
+  font-size: 0.9rem;
+  font-weight: 700;
+  color: #fbbf24;
+}
+
+.venue-price {
+  font-size: 0.825rem;
+  font-weight: 600;
+  color: var(--color-success);
+}
+
+.venue-description {
+  font-size: 0.825rem;
+  color: var(--text-muted);
+  line-height: 1.45;
+}
+
+.venue-footer {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 0.85rem;
+  padding-top: 0.5rem;
+  border-top: 1px solid rgba(255, 255, 255, 0.05);
+  flex-wrap: wrap;
+}
+
+.venue-address-info {
+  display: flex;
+  flex-direction: column;
+  gap: 0.3rem;
+  flex: 1;
+  min-width: 180px;
+}
+
+.venue-address {
+  font-size: 0.75rem;
+  color: var(--text-dim);
+}
+
+.venue-amenities {
+  display: flex;
+  gap: 0.35rem;
+  flex-wrap: wrap;
+}
+
+.amenity-pill {
+  font-size: 0.68rem;
+  background-color: rgba(255, 255, 255, 0.05);
+  padding: 0.15rem 0.45rem;
+  border-radius: var(--radius-sm);
+  color: var(--text-muted);
+}
+
+.venue-actions {
+  display: flex;
+  align-items: center;
+}
+
+.btn-maps-direct {
+  background-color: rgba(59, 130, 246, 0.12);
+  border-color: rgba(59, 130, 246, 0.3);
+  color: #93c5fd;
+  white-space: nowrap;
+  font-weight: 600;
+  transition: all 0.15s ease;
+}
+
+.btn-maps-direct:hover {
+  background-color: var(--color-primary);
+  border-color: var(--color-primary);
+  color: #fff;
+  text-decoration: none;
+}
+
+.spinner-inline {
+  display: inline-block;
+  animation: spin 1s infinite linear;
+}
+
+@keyframes spin {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
+}
+
+@media (max-width: 640px) {
+  .outings-col-sector {
+    flex: 1 1 100%;
+  }
+  .outings-col-search {
+    flex: 1 1 100%;
+  }
+  .venue-card-header {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+  .venue-meta-rating {
+    align-items: flex-start;
+    flex-direction: row;
+    gap: 0.6rem;
+  }
+  .venue-footer {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 0.75rem;
+  }
+  .btn-maps-direct {
+    width: 100%;
+    text-align: center;
+    justify-content: center;
+  }
+}
+

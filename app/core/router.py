@@ -1,6 +1,8 @@
 """Tool router coordinating domain service execution and markdown response formatting."""
 
+import logging
 import re
+import urllib.parse
 from datetime import datetime
 from typing import Any, Dict, Optional
 
@@ -14,6 +16,8 @@ from app.integrations.protocols import (
     TaskServiceProtocol,
     TransactionType,
 )
+
+logger = logging.getLogger(__name__)
 
 
 class ToolRouter:
@@ -106,8 +110,10 @@ class ToolRouter:
             "saldo", "cuál", "cual", "cuánto", "cuanto", "dinero", "finanzas",
             "correo", "correos", "revisa", "revisar", "leer", "bandeja", "urgente",
             "tarea", "tareas", "pendiente", "pendientes", "recuérdame", "recuerdame", "anotar",
-            "agenda", "agendar", "reunión", "reunion", "cita", "evento", "horario",
-            "planes", "salir", "restaurante", "comer", "sitios", "café", "ocio",
+            "planes", "plan", "salir", "restaurante", "restaurantes", "lugar", "lugares",
+            "comer", "comida", "cenar", "cena", "almorzar", "almuerzo", "sitios", "sitio",
+            "café", "cafe", "ocio", "parque", "zona", "chapinero", "usaquén", "usaquen",
+            "candelaria", "poblado", "laureles",
             "cancelar", "cancela", "elimina", "eliminar", "borra", "borrar", "quitar", "quítale", "quitale", "quítame", "quitame", "salir", "ayuda", "hola", "mil", "pesos", "cop", "millones",
             "hoy", "mañana", "manana", "mes", "semana", "buseta", "flota", "pasaje", "pasajes",
             "buenos", "buen", "días", "dias", "día", "dia", "hice", "terminé", "termine", "completé", "complete", "hecha", "hecho", "consejo", "financiero", "financiera", "consejos", "puedo",
@@ -177,34 +183,85 @@ class ToolRouter:
 
         dollars = amount_cents / 100.0
 
+        acc_updated = None
+        total_nw = None
+        acc_name = None
+        bal_val = None
+
+        acc_svc = self.effective_account_service
+        acc_svc.ensure_default_accounts(user_id)
+
+        target_name = account_name or "Efectivo"
+
+        handled_by_acc_service = False
+        if account_name and amount_cents > 0:
+            try:
+                if t_type == TransactionType.INCOME and hasattr(acc_svc, "deposit"):
+                    op_result = acc_svc.deposit(
+                        user_id=user_id,
+                        account_id_or_name=target_name,
+                        amount_cents=amount_cents,
+                        concept=description,
+                        category=category,
+                    )
+                    handled_by_acc_service = True
+                elif t_type == TransactionType.EXPENSE and hasattr(acc_svc, "withdraw"):
+                    op_result = acc_svc.withdraw(
+                        user_id=user_id,
+                        account_id_or_name=target_name,
+                        amount_cents=amount_cents,
+                        concept=description,
+                        category=category,
+                    )
+                    handled_by_acc_service = True
+
+                if handled_by_acc_service:
+                    acc_info = op_result.get("account", {})
+                    if hasattr(acc_info, "name"):
+                        acc_name = acc_info.name
+                        bal_val = getattr(acc_info, "balance", getattr(acc_info, "balance_cents", 0) / 100.0)
+                        acc_updated = acc_info
+                    elif isinstance(acc_info, dict):
+                        acc_name = acc_info.get("name", target_name)
+                        bal_val = acc_info.get("balance", acc_info.get("balance_cents", 0) / 100.0)
+                        acc_updated = acc_info
+                    total_nw = op_result.get(
+                        "total_net_worth",
+                        op_result.get("net_worth", {}).get("total_net_worth"),
+                    )
+            except Exception as e:
+                logger.error(f"Failed to execute direct balance operation on {account_name}: {e}")
+                handled_by_acc_service = False
+
+        if not handled_by_acc_service:
+            if self.finance_service:
+                self.finance_service.record_transaction(
+                    user_id=user_id,
+                    amount_cents=amount_cents,
+                    t_type=t_type,
+                    category=category,
+                    description=description,
+                )
+
+            if amount_cents > 0:
+                try:
+                    acc = acc_svc.get_account_by_name(user_id, target_name)
+                    if acc:
+                        delta = amount_cents if t_type == TransactionType.INCOME else -amount_cents
+                        acc_rec = acc_svc.adjust_balance(acc.id, delta)
+                        acc_updated = acc_rec
+                        acc_name = acc_rec.name
+                        bal_val = acc_rec.balance
+                        nw = acc_svc.get_net_worth(user_id)
+                        total_nw = nw.get("total_net_worth", 0)
+                except Exception as e:
+                    logger.error(f"Failed to adjust balance for account {target_name}: {e}")
+
+        # Check budget alerts
         if self.finance_service:
-            self.finance_service.record_transaction(
-                user_id=user_id,
-                amount_cents=amount_cents,
-                t_type=t_type,
-                category=category,
-                description=description,
-            )
             alerts = self.finance_service.check_budget_alerts(user_id)
         else:
             alerts = []
-
-        # Adjust balance on linked account
-        acc_updated = None
-        total_nw = None
-        if amount_cents > 0:
-            try:
-                acc_svc = self.effective_account_service
-                acc_svc.ensure_default_accounts(user_id)
-                target_name = account_name or "Efectivo"
-                acc = acc_svc.get_account_by_name(user_id, target_name)
-                if acc:
-                    delta = amount_cents if t_type == TransactionType.INCOME else -amount_cents
-                    acc_updated = acc_svc.adjust_balance(acc.id, delta)
-                    nw = acc_svc.get_net_worth(user_id)
-                    total_nw = nw.get("total_net_worth", 0)
-            except Exception as e:
-                logger.error(f"Failed to adjust balance for account {account_name}: {e}")
 
         category_map = {
             "Food & Dining": "Alimentación y Restaurantes",
@@ -218,7 +275,19 @@ class ToolRouter:
             "Other": "Otros",
         }
         cat_display = category_map.get(category, category) if is_spanish else category
-        amt_str = f"${int(dollars):,} COP" if (is_spanish and dollars.is_integer()) else f"${dollars:,.2f} COP" if is_spanish else f"${dollars:,.2f}"
+        amt_str = (
+            f"${int(dollars):,} COP"
+            if (is_spanish and dollars.is_integer())
+            else f"${dollars:,.2f} COP" if is_spanish else f"${dollars:,.2f}"
+        )
+
+        bal_str = ""
+        if bal_val is not None:
+            bal_str = (
+                f"${int(bal_val):,} COP"
+                if (is_spanish and isinstance(bal_val, (int, float)) and float(bal_val).is_integer())
+                else f"${bal_val:,.2f} COP" if is_spanish else f"${bal_val:,.2f}"
+            )
 
         if is_spanish:
             if t_type == TransactionType.INCOME:
@@ -235,10 +304,18 @@ class ToolRouter:
                     f"• **Descripción:** {description}\n"
                     f"• **Categoría:** *{cat_display}*"
                 )
-            if acc_updated:
-                msg += f"\n• **Cuenta:** {acc_updated.name} (Nuevo Saldo: `${acc_updated.balance:,.0f} COP`)"
+            if acc_name and bal_str:
+                msg += f"\n• **Cuenta:** {acc_name} (Nuevo Saldo: `{bal_str}`)"
+            elif acc_updated:
+                acc_display_name = getattr(acc_updated, "name", None) or acc_name
+                msg += f"\n• **Cuenta:** {acc_display_name}"
             if total_nw is not None and account_name:
-                msg += f"\n\n💰 **Patrimonio Neto Total:** **${total_nw:,.0f} COP**"
+                nw_str = (
+                    f"${int(total_nw):,} COP"
+                    if (isinstance(total_nw, (int, float)) and float(total_nw).is_integer())
+                    else f"${total_nw:,.2f} COP"
+                )
+                msg += f"\n\n💰 **Patrimonio Neto Total:** **{nw_str}**"
             if alerts:
                 alert_text = "\n".join(f"• ⚠️ {a}" for a in alerts)
                 msg += f"\n\n**Advertencias de Presupuesto:**\n{alert_text}"
@@ -257,8 +334,18 @@ class ToolRouter:
                     f"• **Description:** {description}\n"
                     f"• **Category:** *{category}*"
                 )
-            if acc_updated:
-                msg += f"\n• **Account:** {acc_updated.name} (New Balance: `${acc_updated.balance:,.2f}`)"
+            if acc_name and bal_str:
+                msg += f"\n• **Account:** {acc_name} (New Balance: `{bal_str}`)"
+            elif acc_updated:
+                acc_display_name = getattr(acc_updated, "name", None) or acc_name
+                msg += f"\n• **Account:** {acc_display_name}"
+            if total_nw is not None and account_name:
+                nw_str = (
+                    f"${int(total_nw):,} COP"
+                    if (isinstance(total_nw, (int, float)) and float(total_nw).is_integer())
+                    else f"${total_nw:,.2f} COP"
+                )
+                msg += f"\n\n💰 **Total Net Worth:** **{nw_str}**"
             if alerts:
                 alert_text = "\n".join(f"• ⚠️ {a}" for a in alerts)
                 msg += f"\n\n**Budget Warnings:**\n{alert_text}"
@@ -813,29 +900,87 @@ class ToolRouter:
         query = slots.get("query", "actividades cerca" if is_spanish else "activities nearby")
         cuisine = slots.get("cuisine")
         activity = slots.get("activity")
-        location = slots.get("location", "cerca" if is_spanish else "nearby")
+        location = slots.get("location", "tu zona" if is_spanish else "your area")
+        coordinates = slots.get("coordinates")
+        if not coordinates and "latitude" in slots and "longitude" in slots:
+            try:
+                coordinates = (float(slots["latitude"]), float(slots["longitude"]))
+            except (TypeError, ValueError):
+                coordinates = None
 
+        results = []
         if self.search_service:
-            results = self.search_service.search_outings(user_id, query=query, location=location)
-            if results:
-                header = f"🌟 **Recomendaciones en {location}**" if is_spanish else f"🌟 **Recommendations for {location}**"
-                lines = [header]
-                for r in results:
-                    name = r.get("name", "Lugar" if is_spanish else "Venue")
-                    rating = r.get("rating", 4.5)
-                    price = r.get("price_tier", "$$")
-                    desc = r.get("description", "")
-                    lines.append(f"• **{name}** (⭐ {rating} | {price})\n  {desc}")
-                return "\n".join(lines)
+            try:
+                import inspect
+                sig = inspect.signature(self.search_service.search_outings)
+                if "coordinates" in sig.parameters:
+                    results = self.search_service.search_outings(
+                        user_id, query=query, location=location, coordinates=coordinates
+                    )
+                else:
+                    results = self.search_service.search_outings(user_id, query=query, location=location)
+            except Exception as e:
+                logger.warning("Search service query error: %s", e)
+                if is_spanish:
+                    return f"⚠️ Servicio de búsqueda temporalmente no disponible: {e}"
+                return f"⚠️ Outing search service is currently unavailable: {e}"
+
+        if results:
+            loc_display = (
+                location
+                if location not in ("nearby", "cerca", "your area", "tu zona")
+                else ("tu ubicación actual" if is_spanish else "your location")
+            )
+            header = (
+                f"🌟 **Recomendaciones en {loc_display}**:"
+                if is_spanish
+                else f"🌟 **Recommendations for {loc_display}**:"
+            )
+            lines = [header, ""]
+            for r in results[:5]:
+                name = r.get("name", "Lugar" if is_spanish else "Venue")
+                cat = r.get("cuisine") or r.get("category") or ("Gastronomía" if is_spanish else "Dining")
+                rating = r.get("rating", 4.5)
+                price = r.get("price_tier", "$$")
+                addr = r.get("address", "")
+                desc = r.get("description", "")
+                maps_url = r.get("maps_url")
+                if not maps_url and name:
+                    q_str = f"{name}, {addr}" if addr else name
+                    maps_url = f"https://www.google.com/maps/search/?api=1&query={urllib.parse.quote_plus(q_str)}"
+
+                cat_lower = str(cat).lower()
+                icon = "🍽️"
+                if any(k in cat_lower for k in ["cafe", "café", "coffee"]):
+                    icon = "☕"
+                elif any(k in cat_lower for k in ["bar", "pub", "cerveza", "cervecería", "nightlife", "rumba"]):
+                    icon = "🍺"
+                elif any(k in cat_lower for k in ["parque", "park", "outdoor", "aire libre"]):
+                    icon = "🌳"
+                elif any(k in cat_lower for k in ["museo", "museum", "cultura", "cultural", "teatro"]):
+                    icon = "🎭"
+
+                lines.append(f"{icon} **{name}** — *{cat}*")
+                lines.append(f"⭐ **{rating}** | 💰 `{price}`")
+                if addr:
+                    lines.append(f"📍 {addr}")
+                if desc:
+                    lines.append(f"_{desc}_")
+                if maps_url:
+                    maps_text = "Ver en Google Maps" if is_spanish else "View on Google Maps"
+                    lines.append(f"🗺️ [{maps_text}]({maps_url})")
+                lines.append("")
+            return "\n".join(lines).strip()
 
         gemini_svc = self.effective_gemini_service
         if gemini_svc and gemini_svc.is_available() and is_spanish:
             prompt = (
-                f"Eres el asistente personal de Samuel Azuero en Bogotá, Colombia. "
+                "Eres el asistente personal de Samuel Azuero en Bogotá, Colombia. "
                 f"El usuario busca planes o recomendaciones para: '{query}'. "
                 f"Ubicación o contexto: '{location}'. Cocina/Actividad: '{cuisine or activity or 'variado'}'.\n"
-                "Recomienda 3 lugares o planes reales y destacados en Bogotá (ej: Usaquén, Chapinero, La Candelaria, Zona G, etc.), "
-                "con estimados de precios en Pesos Colombianos (COP) y un tip práctico. Usa formato Markdown con viñetas limpias."
+                "Recomienda 3 lugares o planes reales y destacados en Bogotá (ej: Usaquén, Chapinero, etc.), "
+                "con estimados de precios en Pesos Colombianos (COP) y un tip práctico. Usa formato Markdown "
+                "con viñetas limpias e incluye enlaces [Ver en Google Maps](https://maps.google.com/?q=Nombre+Lugar)."
             )
             try:
                 outings_text = gemini_svc.generate_text(prompt=prompt, temperature=0.7)
@@ -846,23 +991,33 @@ class ToolRouter:
 
         topic = cuisine or activity or ("Planes" if is_spanish else "Outings")
         if is_spanish:
+            enc_loc = urllib.parse.quote_plus(location or "Bogota")
+            u1 = f"https://www.google.com/maps/search/?api=1&query=Restaurante+La+Casona+{enc_loc}"
+            u2 = f"https://www.google.com/maps/search/?api=1&query=Cafe+Bistro+Central+{enc_loc}"
+            u3 = f"https://www.google.com/maps/search/?api=1&query=Ruta+del+Parque+{enc_loc}"
             return (
-                f"🌟 **Recomendaciones Destacadas ({topic} en {location})**\n"
-                f"1. **Restaurante La Casona** (⭐ 4.8 | `$$`)\n"
+                f"🌟 **Recomendaciones Destacadas ({topic} en {location})**\n\n"
+                f"🍽️ **Restaurante La Casona** (⭐ 4.8 | `$$`)\n"
                 f"   Ingredientes frescos, excelente sazón y gran ambiente.\n"
-                f"2. **Café Bistro Central** (⭐ 4.6 | `$$$`)\n"
+                f"   🗺️ [Ver en Google Maps]({u1})\n\n"
+                f"☕ **Café Bistro Central** (⭐ 4.6 | `$$$`)\n"
                 f"   Especialidades de autor y ambiente ideal para compartir.\n"
-                f"3. **Ruta del Parque y Café de Origen** (⭐ 4.7 | `$`) \n"
-                f"   Caminata al aire libre seguida de café artesanal colombiano."
+                f"   🗺️ [Ver en Google Maps]({u2})\n\n"
+                f"🌳 **Ruta del Parque y Café de Origen** (⭐ 4.7 | `$`) \n"
+                f"   Caminata al aire libre seguida de café artesanal colombiano.\n"
+                f"   🗺️ [Ver en Google Maps]({u3})"
             )
+        enc_loc = urllib.parse.quote_plus(location or "Downtown")
+        u_en1 = f"https://www.google.com/maps/search/?api=1&query=The+Artisan+Table+{enc_loc}"
+        u_en2 = f"https://www.google.com/maps/search/?api=1&query=Downtown+Bistro+{enc_loc}"
         return (
-            f"🌟 **Top Recommendations ({topic} in {location})**\n"
-            f"1. **The Artisan Table** (⭐ 4.8 | `$$`)\n"
+            f"🌟 **Top Recommendations ({topic} in {location})**\n\n"
+            f"🍽️ **The Artisan Table** (⭐ 4.8 | `$$`)\n"
             f"   Fresh seasonal ingredients with exceptional ambiance.\n"
-            f"2. **Downtown Bistro** (⭐ 4.6 | `$$$`)\n"
+            f"   🗺️ [View on Google Maps]({u_en1})\n\n"
+            f"🍽️ **Downtown Bistro** (⭐ 4.6 | `$$$`)\n"
             f"   Highly rated chef specials and cozy atmosphere.\n"
-            f"3. **City Park Trail & Cafe** (⭐ 4.7 | `$`) \n"
-            f"   Scenic outdoor walk followed by artisan coffee."
+            f"   🗺️ [View on Google Maps]({u_en2})"
         )
 
     def _handle_cancel(self, user_id: str, slots: Dict[str, Any], is_spanish: bool = False) -> str:
@@ -1028,6 +1183,10 @@ class ToolRouter:
         reason = slots.get("reason") or slots.get("notes") or "préstamo"
         due_date = slots.get("due_date")
         account_name = slots.get("account") or slots.get("account_name", "Efectivo")
+        is_installment = bool(slots.get("is_installment"))
+        total_installments = int(slots.get("total_installments") or 1)
+        payment_frequency = slots.get("payment_frequency") or "monthly"
+        next_installment_due_date = slots.get("next_installment_due_date")
 
         try:
             record = svc.record_debt(
@@ -1038,13 +1197,59 @@ class ToolRouter:
                 reason=reason,
                 due_date=due_date,
                 account_name=account_name,
+                is_installment=is_installment,
+                total_installments=total_installments,
+                payment_frequency=payment_frequency,
+                next_installment_due_date=next_installment_due_date,
             )
 
             amount_fmt = f"${amount_cents / 100:,.0f} COP"
             if record.due_date:
-                due_str = record.due_date.strftime("%Y-%m-%d") if hasattr(record.due_date, "strftime") else str(record.due_date)[:10]
+                due_str = (
+                    record.due_date.strftime("%Y-%m-%d")
+                    if hasattr(record.due_date, "strftime")
+                    else str(record.due_date)[:10]
+                )
             else:
                 due_str = "Sin fecha límite"
+
+            if record.is_installment:
+                freq_es = {
+                    "monthly": "Mensual",
+                    "weekly": "Semanal",
+                    "biweekly": "Quincenal",
+                    "yearly": "Anual",
+                }.get(record.payment_frequency, record.payment_frequency.capitalize())
+                inst_amt_fmt = f"${record.installment_amount_cents / 100:,.0f} COP"
+                next_due_str = (
+                    record.next_installment_due_date.strftime("%Y-%m-%d")
+                    if record.next_installment_due_date
+                    else due_str
+                )
+                if record.debt_type.value == "receivable":
+                    return (
+                        f"🤝 **Préstamo por Cobrar en Cuotas Registrado**\n\n"
+                        f"• Deudor: **{record.counterparty}**\n"
+                        f"• Monto total: **{amount_fmt}**\n"
+                        f"• Plan de pagos: **{record.total_installments} cuotas** de **{inst_amt_fmt}**\n"
+                        f"• Frecuencia: **{freq_es}**\n"
+                        f"• Próximo vencimiento: **{next_due_str}**\n"
+                        f"• Cuenta de desembolso: **{record.account_name}**\n"
+                        f"• Concepto: {record.reason}\n"
+                        f"• Estado: **Activo**"
+                    )
+                else:
+                    return (
+                        f"📝 **Deuda por Pagar en Cuotas Registrada**\n\n"
+                        f"• Prestamista: **{record.counterparty}**\n"
+                        f"• Monto total: **{amount_fmt}**\n"
+                        f"• Plan de pagos: **{record.total_installments} cuotas** de **{inst_amt_fmt}**\n"
+                        f"• Frecuencia: **{freq_es}**\n"
+                        f"• Próximo vencimiento: **{next_due_str}**\n"
+                        f"• Cuenta de abono: **{record.account_name}**\n"
+                        f"• Concepto: {record.reason}\n"
+                        f"• Estado: **Activo**"
+                    )
 
             if record.debt_type.value == "receivable":
                 return (
@@ -1072,7 +1277,7 @@ class ToolRouter:
     def _handle_debt_settle(
         self, user_id: str, slots: Dict[str, Any], is_spanish: bool = False
     ) -> str:
-        """Handle full or partial debt settlements."""
+        """Handle full or partial debt settlements and installment payments."""
         svc = self.effective_debt_service
         counterparty = slots.get("counterparty")
         amount_cents = slots.get("amount_cents")
@@ -1084,7 +1289,56 @@ class ToolRouter:
         active_debts = [d for d in debts if d.status.value in ("active", "partially_paid")]
 
         if not active_debts:
-            return f"ℹ️ No se encontraron deudas activas con **{counterparty}**."
+            if counterparty:
+                return f"ℹ️ No se encontraron deudas activas con **{counterparty}**."
+            return "ℹ️ No se encontraron deudas activas pendientes."
+
+        if slots.get("is_installment_payment"):
+            installments_to_pay = int(slots.get("installments_to_pay") or 1)
+            installment_debts = [d for d in active_debts if d.is_installment]
+            target_debt = installment_debts[0] if installment_debts else active_debts[0]
+            try:
+                res = svc.record_installment_payment(
+                    debt_id=target_debt.id,
+                    user_id=user_id,
+                    installments_to_pay=installments_to_pay,
+                    account_name=account_name,
+                )
+                paid_cents = res.get("payment", {}).get("amount_cents", 0)
+                paid_fmt = f"${paid_cents / 100:,.0f} COP"
+                rem_inst = res.get("remaining_installments", 0)
+                total_inst = target_debt.total_installments or 1
+                paid_inst = res.get("installments_paid", installments_to_pay)
+
+                if res.get("settled"):
+                    return (
+                        f"🎉 **¡Deuda en Cuotas Totalmente Saldada!**\n\n"
+                        f"• Contraparte: **{target_debt.counterparty}**\n"
+                        f"• Cuotas liquidadas: **{paid_inst}** (Completadas todas las {total_inst} cuotas)\n"
+                        f"• Monto liquidado: **{paid_fmt}**\n"
+                        f"• Cuenta: **{account_name or target_debt.account_name or 'Efectivo'}**\n"
+                        f"• Saldo restante: **$0 COP**\n"
+                        f"• Estado: **Liquidada / Settled**"
+                    )
+                else:
+                    debt_dict = res.get("debt") or {}
+                    rem_cents = debt_dict.get("remaining_cents", 0)
+                    rem_fmt = f"${rem_cents / 100:,.0f} COP"
+                    next_due = debt_dict.get("next_installment_due_date")
+                    next_due_str = str(next_due)[:10] if next_due else "Por definir"
+                    return (
+                        f"✅ **Abono de Cuota(s) Registrado**\n\n"
+                        f"• Contraparte: **{target_debt.counterparty}**\n"
+                        f"• Cuotas pagadas: **{paid_inst}**\n"
+                        f"• Cuotas pendientes: **{rem_inst} de {total_inst}**\n"
+                        f"• Monto abonado: **{paid_fmt}**\n"
+                        f"• Saldo restante: **{rem_fmt}**\n"
+                        f"• Próxima cuota: **{next_due_str}**\n"
+                        f"• Cuenta: **{account_name or target_debt.account_name or 'Efectivo'}**\n"
+                        f"• Estado: **Parcialmente pagado**"
+                    )
+            except Exception as e:
+                return f"❌ Error al procesar el pago de cuotas: {str(e)}"
 
         target_debt = active_debts[0]
 

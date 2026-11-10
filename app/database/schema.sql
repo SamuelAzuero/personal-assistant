@@ -153,11 +153,20 @@ CREATE TABLE IF NOT EXISTS debts (
     paid_amount_cents INTEGER NOT NULL DEFAULT 0 CHECK (paid_amount_cents >= 0),
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     settled_at TIMESTAMP,
+    -- Installment loan / cuotas fields (M12 / R3)
+    is_installment BOOLEAN NOT NULL DEFAULT 0,
+    total_installments INTEGER DEFAULT 1,
+    remaining_installments INTEGER DEFAULT 1,
+    installment_amount_cents INTEGER DEFAULT 0,
+    payment_frequency TEXT DEFAULT 'monthly',
+    next_installment_due_date TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     FOREIGN KEY (user_id) REFERENCES users(user_id) ON DELETE CASCADE,
     FOREIGN KEY (account_id) REFERENCES accounts(account_id) ON DELETE SET NULL
 );
 CREATE INDEX IF NOT EXISTS idx_debts_user_status ON debts(user_id, status, due_date);
 CREATE INDEX IF NOT EXISTS idx_debts_counterparty ON debts(user_id, counterparty);
+CREATE INDEX IF NOT EXISTS idx_debts_installments ON debts(user_id, is_installment, status, next_installment_due_date);
 
 -- 11. Debt & Receivable Payments / Settlements (R1)
 CREATE TABLE IF NOT EXISTS debt_payments (
@@ -170,6 +179,8 @@ CREATE TABLE IF NOT EXISTS debt_payments (
     notes TEXT,
     payment_date TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    -- Installment tracking (M12 / R3)
+    installments_paid INTEGER DEFAULT 1,
     FOREIGN KEY (debt_id) REFERENCES debts(debt_id) ON DELETE CASCADE,
     FOREIGN KEY (user_id) REFERENCES users(user_id) ON DELETE CASCADE,
     FOREIGN KEY (account_id) REFERENCES accounts(account_id) ON DELETE SET NULL

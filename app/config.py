@@ -20,6 +20,17 @@ class Settings(BaseSettings):
 
     # Database settings
     database_path: str = Field(default="data/assistant.db", description="SQLite database file path or :memory:")
+    persistent_db_path: Optional[str] = Field(
+        default=None,
+        description=(
+            "Path to persistent storage file (e.g., /app/data/assistant.db on GCS volume mount) "
+            "for backup and restore synchronization."
+        ),
+    )
+    sync_on_commit: bool = Field(
+        default=True,
+        description="Synchronize write transactions to persistent_db_path on commit",
+    )
 
     # Mock services toggle (default True for offline development and testing)
     mock_services: bool = Field(default=True, description="Enable simulated mocks for all external APIs")
@@ -52,7 +63,9 @@ class Settings(BaseSettings):
     secondary_gmail_user_email: Optional[str] = Field(
         default=None, description="Secondary institutional monitored Gmail address"
     )
-    gmail_app_password: Optional[str] = Field(default=None, description="Google App Password (16 characters) for IMAP access")
+    gmail_app_password: Optional[str] = Field(
+        default=None, description="Google App Password (16 characters) for IMAP access"
+    )
     secondary_gmail_app_password: Optional[str] = Field(
         default=None, description="Google App Password for secondary institutional IMAP access"
     )

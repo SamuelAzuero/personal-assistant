@@ -2,6 +2,7 @@
 
 import logging
 import re
+import unicodedata
 from datetime import datetime, time, timedelta, timezone
 from decimal import Decimal, InvalidOperation
 from typing import Any, Dict, List, Optional
@@ -929,8 +930,14 @@ class IntentParser(IntentParserProtocol):
             elif cand not in ("mi", "mis", "un", "una", "el", "la", "pagar"):
                 to_acc = cand.capitalize()
 
+        matched_verb = transfer_verb_match.group(1)
+        is_saque = any(w in matched_verb for w in ("saqu", "saca"))
+
         if is_withdrawal and not to_acc:
-            to_acc = "Efectivo"
+            if is_saque and from_acc and from_acc != "Efectivo":
+                to_acc = "Efectivo"
+            else:
+                return None
 
         slots: Dict[str, Any] = {}
         missing_slots: List[str] = []
@@ -966,7 +973,71 @@ class IntentParser(IntentParserProtocol):
         )
 
     def _parse_debt_settle(self, raw: str, lower: str) -> Optional[IntentResult]:
-        """Detect and extract full or partial debt settlements (e.g. le pagué 20 mil a Juan)."""
+        """Detect and extract full or partial debt settlements (e.g. le pagué 20 mil a Juan, pagar 2 cuotas)."""
+        word_to_num = {
+            "un": 1, "una": 1, "uno": 1, "dos": 2, "tres": 3, "cuatro": 4,
+            "cinco": 5, "seis": 6, "siete": 7, "ocho": 8, "nueve": 9, "diez": 10,
+            "doce": 12, "veinticuatro": 24,
+        }
+
+        # Check for installment payment (e.g. "pagar 2 cuotas de la deuda de Juan con Bancolombia", "abono 1 cuota a Daviplata")
+        m_cuotas_pay = re.search(
+            r"\b(?:pagar|pagu[eé]|abonar|abono|abonando|pagando)\s+(?:(\d+|un|una|uno|dos|tres|cuatro|cinco|seis|siete|ocho|nueve|diez)\s+)?cuotas?\b",
+            lower,
+        )
+        if m_cuotas_pay:
+            num_str = m_cuotas_pay.group(1)
+            if num_str:
+                cuotas_to_pay = int(num_str) if num_str.isdigit() else word_to_num.get(num_str.lower(), 1)
+            else:
+                cuotas_to_pay = 1
+
+            # Extract account
+            account = None
+            for acc_k, acc_name in COLOMBIAN_ACCOUNTS.items():
+                if re.search(rf"\b(?:desde|en|por|con|a)\s+{acc_k}\b", lower) or re.search(rf"\b{acc_k}\b", lower):
+                    account = acc_name
+                    break
+
+            # Extract counterparty (excluding accounts and helper words)
+            counterparty = None
+            m_cp = re.search(
+                r"\b(?:de\s+la\s+deuda\s+(?:de|con)\s+|deuda\s+(?:de|con)\s+|con\s+|de\s+|a\s+)([A-ZÁÉÍÓÚa-záéíóú]+)",
+                raw,
+                re.IGNORECASE,
+            )
+            if m_cp:
+                cand = m_cp.group(1).strip()
+                if cand.lower() not in (
+                    "un", "una", "el", "la", "los", "las", "mi", "mis", "deuda", "plata", "cuota", "cuotas",
+                    "nequi", "nu", "daviplata", "bancolombia", "efectivo"
+                ):
+                    counterparty = cand.capitalize()
+
+            slots: Dict[str, Any] = {
+                "is_installment_payment": True,
+                "installments_to_pay": cuotas_to_pay,
+            }
+            if counterparty:
+                slots["counterparty"] = counterparty
+            if account:
+                slots["account"] = account
+                slots["account_name"] = account
+
+            amount_cents = self._extract_amount_cents(raw)
+            if amount_cents is not None:
+                slots["amount_cents"] = amount_cents
+                slots["amount"] = amount_cents / 100.0
+
+            return IntentResult(
+                intent=IntentType.DEBT_SETTLE,
+                confidence=0.95,
+                slots=slots,
+                is_complete=True,
+                missing_slots=[],
+                raw_text=raw,
+            )
+
         settle_pats = [
             r"\ble\s+pagu[eé]\s+(?:[\$0-9k\.\,\s]+(?:mil|k|pesos|millones)?\s+)?a\s+([A-ZÁÉÍÓÚa-záéíóú]+)",
             r"\b([A-ZÁÉÍÓÚa-záéíóú]+)\s+(?:ya\s+)?me\s+pag[oó]",
@@ -1001,7 +1072,7 @@ class IntentParser(IntentParserProtocol):
                 account = acc_name
                 break
 
-        slots: Dict[str, Any] = {
+        slots = {
             "counterparty": counterparty,
         }
         if amount_cents is not None:
@@ -1061,14 +1132,15 @@ class IntentParser(IntentParserProtocol):
                     ):
                         counterparty = cand.capitalize()
             if not counterparty:
-                m = re.search(r"\b(?:a|para)\s+([A-ZÁÉÍÓÚa-záéíóú]+)", raw)
-                if m:
+                for m in re.finditer(r"\b(?:a|para)\s+([A-ZÁÉÍÓÚa-záéíóú]+)", raw):
                     cand = m.group(1).strip()
                     if cand.lower() not in (
                         "un", "una", "el", "la", "los", "las", "mi", "mis",
-                        "nequi", "nu", "daviplata", "bancolombia", "efectivo"
+                        "nequi", "nu", "daviplata", "bancolombia", "efectivo",
+                        "cuota", "cuotas"
                     ):
                         counterparty = cand.capitalize()
+                        break
         else:
             m1 = re.search(r"([A-ZÁÉÍÓÚa-záéíóú]+)\s+me\s+prest[oó]", raw, re.IGNORECASE)
             if m1:
@@ -1076,14 +1148,15 @@ class IntentParser(IntentParserProtocol):
                 if cand.lower() not in ("ayer", "hoy", "ya", "él", "el", "ella"):
                     counterparty = cand.capitalize()
             if not counterparty:
-                m_con = re.search(r"\b(?:con|a)\s+([A-ZÁÉÍÓÚa-záéíóú]+)", raw, re.IGNORECASE)
-                if m_con:
+                for m_con in re.finditer(r"\b(?:con|a)\s+([A-ZÁÉÍÓÚa-záéíóú]+)", raw, re.IGNORECASE):
                     cand = m_con.group(1).strip()
                     if cand.lower() not in (
                         "un", "una", "el", "la", "los", "las", "mi", "mis",
-                        "nequi", "nu", "daviplata", "bancolombia", "efectivo", "plata", "dinero"
+                        "nequi", "nu", "daviplata", "bancolombia", "efectivo", "plata", "dinero",
+                        "cuota", "cuotas"
                     ):
                         counterparty = cand.capitalize()
+                        break
             if not counterparty:
                 m2 = re.search(
                     r"\b(?:le\s+debo|debo)\s+(?:[\$0-9k\.\,\s]+(?:mil|k|pesos|millones)?\s+)?a\s+([A-ZÁÉÍÓÚa-záéíóú]+)",
@@ -1092,7 +1165,7 @@ class IntentParser(IntentParserProtocol):
                 )
                 if m2:
                     cand = m2.group(1).strip()
-                    if cand.lower() not in ("un", "una", "el", "la"):
+                    if cand.lower() not in ("un", "una", "el", "la", "cuota", "cuotas"):
                         counterparty = cand.capitalize()
             if not counterparty:
                 m3 = re.search(
@@ -1102,7 +1175,7 @@ class IntentParser(IntentParserProtocol):
                 )
                 if m3:
                     cand = m3.group(1).strip()
-                    if cand.lower() not in ("un", "una", "el", "la", "bancolombia", "nequi", "nu"):
+                    if cand.lower() not in ("un", "una", "el", "la", "bancolombia", "nequi", "nu", "cuota", "cuotas"):
                         counterparty = cand.capitalize()
 
         amount_cents = self._extract_amount_cents(raw)
@@ -1125,9 +1198,12 @@ class IntentParser(IntentParserProtocol):
                 counterparty.lower() if counterparty else "",
                 "nequi", "nu", "bancolombia", "daviplata", "efectivo", "el"
             ):
-                # Only assign as reason if it does not resolve as a date expression
-                if not self._extract_datetime(clean_reason):
+                # Only assign as reason if it does not resolve as a date expression or cuotas
+                if not self._extract_datetime(clean_reason) and not re.search(r"\b\d+\s+cuotas?\b", clean_reason):
                     reason = clean_reason
+
+        if re.search(r"\b\d+\s+cuotas?\b", reason):
+            reason = "préstamo"
 
         due_date = None
         # Explicit payment / deadline markers: "me paga (el)?", "paga (el)?", "vence (el)?", "hasta el"
@@ -1161,6 +1237,36 @@ class IntentParser(IntentParserProtocol):
             "reason": reason,
             "notes": reason,
         }
+
+        # Check for installment terms (e.g. "en 6 cuotas", "a 12 cuotas", "6 cuotas mensuales")
+        m_cuotas = re.search(
+            r"\b(?:en|a)\s+(\d+|un|una|dos|tres|cuatro|cinco|seis|siete|ocho|nueve|diez|doce|veinticuatro)\s+cuotas?\b|\b(\d+)\s+cuotas?\b",
+            lower,
+        )
+        if m_cuotas:
+            word_to_num = {
+                "un": 1, "una": 1, "uno": 1, "dos": 2, "tres": 3, "cuatro": 4,
+                "cinco": 5, "seis": 6, "siete": 7, "ocho": 8, "nueve": 9, "diez": 10,
+                "doce": 12, "veinticuatro": 24,
+            }
+            c_val = m_cuotas.group(1) or m_cuotas.group(2)
+            c_num = int(c_val) if c_val.isdigit() else word_to_num.get(c_val.lower(), 1)
+            slots["is_installment"] = True
+            slots["total_installments"] = c_num
+            slots["remaining_installments"] = c_num
+            if re.search(r"\bquincenal(?:es)?\b", lower):
+                freq = "biweekly"
+            elif re.search(r"\bsemanal(?:es)?\b", lower):
+                freq = "weekly"
+            elif re.search(r"\banual(?:es)?\b", lower):
+                freq = "yearly"
+            else:
+                freq = "monthly"
+            slots["payment_frequency"] = freq
+            if amount_cents:
+                slots["installment_amount_cents"] = amount_cents // c_num
+                slots["installment_amount"] = round((amount_cents // c_num) / 100.0, 2)
+
         missing_slots: List[str] = []
 
         if counterparty:
@@ -1338,7 +1444,9 @@ class IntentParser(IntentParserProtocol):
 
         # Do NOT hijack deposit, expense, debt or transfer actions that should be handled as financial transactions or debts
         deposit_or_expense_verbs = bool(re.search(
-            r"\b(a[ñn]adir|agregar|meter|consignar|consign[eé]|cargar|cargu[eé]|abono|abonar|dep[oó]sito|gast[eé]|pagu[eé]|compr[eé]|prest[eé]|debo|deuda)\b",
+            r"\b(a[ñn]adir|agregar|meter|consignar|consign[eé]|cargar|cargu[eé]|abono|abonar|dep[oó]sito|"
+            r"gast[eé]|pagu[eé]|compr[eé]|prest[eé]|debo|deuda|"
+            r"retir[eé]|retirar|retira|retiro|quit[eé]|quitar|quita|quiten|sacar|saqu[eé]|saca)\b",
             lower
         ))
         if deposit_or_expense_verbs and amount_cents is not None:
@@ -1403,12 +1511,21 @@ class IntentParser(IntentParserProtocol):
             "añadir", "anadir", "agregar", "meter", "consignar", "consigné", "consigne",
             "cargar", "cargué", "cargue", "abono", "abonar", "depósito", "deposito", "entró", "entro"
         ]
+        withdrawal_words = [
+            "retirar", "retiré", "retire", "retira", "retiro",
+            "quitar", "quité", "quite", "quita", "quiten",
+            "sacar", "saqué", "saque", "saca",
+        ]
+        deposit_words = [
+            "añadir", "anadir", "agregar", "meter", "consignar", "consigné", "consigne",
+            "cargar", "cargué", "cargue", "abono", "abonar", "depósito", "deposito", "entró", "entro"
+        ]
         expense_words = [
             "spent", "pay", "paid", "bought", "purchase", "purchased",
             "expense", "cost", "fee", "charged",
             "gasté", "gaste", "pagué", "pague", "compré", "compre", "consumí", "consumi",
-            "costó", "costo", "me costó", "pago", "compra"
-        ]
+            "costó", "costo", "me costó", "pago", "compra",
+        ] + withdrawal_words
 
         has_income = any(re.search(rf"\b{w}\b", lower) for w in income_words)
         has_expense = any(re.search(rf"\b{w}\b", lower) for w in expense_words)
@@ -1440,19 +1557,33 @@ class IntentParser(IntentParserProtocol):
         cleaned_desc_lower = desc.lower().strip() if desc else ""
         if not desc or cleaned_desc_lower in (
             "mi cuenta de nequi", "cuenta de nequi", "nequi", "nu", "bancolombia", "daviplata", "efectivo",
-            "a mi cuenta", "cuenta", "mi cuenta", "a bancolombia", "a nequi", "a nu", "a daviplata", "a efectivo"
-        ) or (cleaned_desc_lower.startswith("a ") and account_name and account_name.lower() in cleaned_desc_lower):
+            "a mi cuenta", "cuenta", "mi cuenta", "a bancolombia", "a nequi", "a nu", "a daviplata", "a efectivo",
+            "de bancolombia", "de nequi", "de nu", "de daviplata", "de efectivo"
+        ) or (cleaned_desc_lower.startswith(("a ", "de ")) and account_name and account_name.lower() in cleaned_desc_lower):
             if account_name:
-                desc = f"Depósito en {account_name}" if t_type == TransactionType.INCOME else f"Gasto desde {account_name}"
+                desc = (
+                    f"Depósito en {account_name}"
+                    if t_type == TransactionType.INCOME
+                    else f"Retiro de {account_name}"
+                )
             else:
                 desc = None
 
         category = self._infer_category(desc or raw) if desc else "Other"
         if t_type == TransactionType.INCOME and category == "Other":
             category = "Income"
+        elif t_type == TransactionType.EXPENSE and any(w in lower for w in withdrawal_words) and category == "Other":
+            category = "Cash" if account_name == "Efectivo" else "Other"
+
+        is_deposit = any(re.search(rf"\b{w}\b", lower) for w in deposit_words)
+        is_withdraw = any(re.search(rf"\b{w}\b", lower) for w in withdrawal_words)
+        action = "deposit" if is_deposit or t_type == TransactionType.INCOME else (
+            "withdraw" if is_withdraw else "expense"
+        )
 
         slots: Dict[str, Any] = {
             "transaction_type": t_type.value,
+            "action": action,
             "category": category,
         }
         if account_name:
@@ -1463,6 +1594,7 @@ class IntentParser(IntentParserProtocol):
 
         if amount_cents is not None:
             slots["amount_cents"] = amount_cents
+            slots["amount"] = amount_cents / 100.0
         else:
             missing_slots.append("amount")
 
@@ -1618,20 +1750,32 @@ class IntentParser(IntentParserProtocol):
             "outing", "things to do", "activities", "weekend plans",
             "recomendar", "recomienda", "recomiéndame", "recomiendame", "buscar planes",
             "planes para salir", "sitios para comer", "buenos restaurantes", "lugares para visitar",
-            "qué hacer en", "que hacer en", "actividades en", "planes en"
+            "qué hacer en", "que hacer en", "actividades en", "planes en",
+            "restaurantes en", "restaurantes", "restaurante", "lugares para cenar", "lugares para comer",
+            "lugares para almorzar", "sitios para cenar", "sitios para almorzar", "dónde cenar", "donde cenar",
+            "dónde comer", "donde comer", "dónde almorzar", "donde almorzar", "cenar en", "comer en",
+            "almorzar en", "buscar restaurantes", "sitios en", "lugares en", "dónde salir", "donde salir",
+            "cenar", "almorzar"
         ]
         if not any(t in lower for t in triggers):
             return None
 
         # Exclude task creation or finance commands
-        if lower.startswith("remind me to") or lower.startswith("add task") or lower.startswith("recuérdame") or lower.startswith("crear tarea"):
+        if (
+            lower.startswith("remind me to")
+            or lower.startswith("add task")
+            or lower.startswith("recuérdame")
+            or lower.startswith("recuerdame")
+            or lower.startswith("crear tarea")
+        ):
             return None
 
         # Detect cuisine
         cuisines = [
             "italian", "mexican", "japanese", "chinese", "thai", "sushi",
             "pizza", "indian", "french", "burger", "vegan", "coffee",
-            "italiana", "mexicana", "japonesa", "china", "hamburguesa", "asado", "café", "postres", "criolla", "colombiana"
+            "italiana", "mexicana", "japonesa", "china", "hamburguesa", "asado",
+            "café", "postres", "criolla", "colombiana", "parrilla"
         ]
         cuisine = None
         for c in cuisines:
@@ -1651,19 +1795,75 @@ class IntentParser(IntentParserProtocol):
                 activity = a.capitalize()
                 break
 
-        # Detect location
+        # Detect location (Unicode-aware regex)
         location = None
-        loc_m = re.search(r"\b(?:in|near|around|en|cerca de|por)\s+([A-Za-z0-9\s]+?)(?:\s+(?:for|this|on|para|el|este)|$)", raw)
+        loc_m = re.search(
+            r"\b(?:in|near|around|en|cerca de|por)\s+([A-Za-z0-9\sáéíóúñÁÉÍÓÚÑüÜ\.\-]+?)(?:\s+(?:for|this|on|para|el|este)|$)",
+            raw,
+            re.IGNORECASE,
+        )
         if loc_m:
-            location = loc_m.group(1).strip()
-        elif "nearby" in lower:
-            location = "nearby"
-        elif "cerca" in lower:
-            location = "cerca"
+            candidate = loc_m.group(1).strip()
+            if candidate.lower() not in ("el", "la", "los", "las", "un", "una", "este", "esta", "mi"):
+                location = candidate
+
+        colombian_sector_canonical = {
+            "chapinero": "Chapinero",
+            "usaquen": "Usaquén",
+            "usaquén": "Usaquén",
+            "parque 93": "Parque 93",
+            "zona g": "Zona G",
+            "zona t": "Zona T",
+            "la candelaria": "La Candelaria",
+            "candelaria": "La Candelaria",
+            "el poblado": "El Poblado",
+            "poblado": "El Poblado",
+            "laureles": "Laureles",
+            "bogota": "Bogotá",
+            "bogotá": "Bogotá",
+            "medellin": "Medellín",
+            "medellín": "Medellín",
+            "cartagena": "Cartagena",
+            "cali": "Cali",
+            "la macarena": "La Macarena",
+            "macarena": "La Macarena",
+            "chico": "Chicó",
+            "chicó": "Chicó",
+            "santa barbara": "Santa Bárbara",
+            "santa bárbara": "Santa Bárbara",
+            "cedritos": "Cedritos",
+            "salitre": "Salitre",
+            "teusaquillo": "Teusaquillo",
+            "rosales": "Rosales",
+        }
+
+        # Check if candidate location or raw text matches canonical Colombian sectors
+        norm_raw = "".join(c for c in unicodedata.normalize("NFD", raw) if unicodedata.category(c) != "Mn").lower()
+        if location:
+            norm_loc = "".join(
+                c for c in unicodedata.normalize("NFD", location) if unicodedata.category(c) != "Mn"
+            ).lower()
+            if norm_loc in colombian_sector_canonical:
+                location = colombian_sector_canonical[norm_loc]
+
+        if not location or location in ("nearby", "cerca"):
+            for sec_key, sec_val in colombian_sector_canonical.items():
+                norm_sec = "".join(
+                    c for c in unicodedata.normalize("NFD", sec_key) if unicodedata.category(c) != "Mn"
+                ).lower()
+                if re.search(rf"\b{re.escape(norm_sec)}\b", norm_raw):
+                    location = sec_val
+                    break
+
+        if not location:
+            if "nearby" in lower:
+                location = "nearby"
+            elif "cerca" in lower:
+                location = "cerca"
 
         return IntentResult(
             intent=IntentType.OUTING_RESEARCH,
-            confidence=0.88,
+            confidence=0.92,
             slots={
                 "query": raw,
                 "cuisine": cuisine,
@@ -1768,6 +1968,9 @@ class IntentParser(IntentParserProtocol):
             r"gasté|gaste|pagué|pague|compré|compre|consumí|consumi|costó|costo|me costó|pago|compra|"
             r"ingreso de|ingreso|ingresos|me pagaron|recibí|recibi|gané|gane|sueldo|salario|"
             r"añadir a mi cuenta de|añadir a mi cuenta|añadir a|añadir|anadir|agregar a|agregar|meter a|meter|consignar en|consignar a|consignar|consigné en|consigné|consigne|cargar a|cargar|cargué|cargue|abono a|abono|abonar|"
+            r"retirar de mi cuenta de|retirar de mi cuenta|retirar de|retirar|retiré de|retiré|retire|retiro de|retiro|"
+            r"quitar de mi cuenta de|quitar de mi cuenta|quitar de|quitar|quité de|quité|quite|quita de|quita|"
+            r"sacar de mi cuenta de|sacar de mi cuenta|sacar de|sacar|saqué de|saqué|saque|saca de|saca|"
             r"en|de|por|para|un|una|el|la|los|las|hoy|ayer|ahora|ahorita|mi\s+cuenta\s+de|cuenta\s+de|mi\s+cuenta|cuenta|"
             r"i want to log an|i want to log|want to log|log an|log|record an|record|add an|add)\b",
             "",

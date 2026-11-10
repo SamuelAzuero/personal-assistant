@@ -11,8 +11,18 @@ from __future__ import annotations
 
 import base64
 import hashlib
+import math
+import unicodedata
+import urllib.parse
 from datetime import datetime, timezone
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, Tuple
+
+
+def _normalize_text(text: Optional[str]) -> str:
+    """Normalize text removing diacritics and lowercasing."""
+    if not text:
+        return ""
+    return "".join(c for c in unicodedata.normalize("NFD", text) if unicodedata.category(c) != "Mn").lower().strip()
 
 
 class AudioProcessingError(Exception):
@@ -447,8 +457,8 @@ class MockWebSearchClient:
 
     def _init_database(self) -> List[Dict[str, Any]]:
         """Initialize curated catalog of places and activities."""
-        return [
-            # Dining: Italian
+        catalog = [
+            # Baseline US Dining: Italian
             {
                 "name": "Luigi's Trattoria",
                 "category": "Italian",
@@ -457,6 +467,9 @@ class MockWebSearchClient:
                 "price_tier": "$$",
                 "address": "124 Pine St, Downtown",
                 "location": "Downtown",
+                "sector": "Downtown",
+                "latitude": 47.6101,
+                "longitude": -122.3421,
                 "description": "Authentic wood-fired pastas, hand-tossed pizzas, and classic tiramisu in a cozy candlelit atmosphere.",
                 "amenities": ["outdoor seating", "wine bar", "reservations"],
                 "opening_hours": "5:00 PM - 10:00 PM",
@@ -469,6 +482,9 @@ class MockWebSearchClient:
                 "price_tier": "$$",
                 "address": "405 Pike St, Downtown",
                 "location": "Downtown",
+                "sector": "Downtown",
+                "latitude": 47.6112,
+                "longitude": -122.3375,
                 "description": "Daily handcrafted pasta ribbons with rich truffle sauces and natural wines.",
                 "amenities": ["takeout", "romantic", "vegetarian options"],
                 "opening_hours": "11:30 AM - 9:30 PM",
@@ -481,6 +497,9 @@ class MockWebSearchClient:
                 "price_tier": "$$$",
                 "address": "812 1st Ave, Downtown",
                 "location": "Downtown",
+                "sector": "Downtown",
+                "latitude": 47.6044,
+                "longitude": -122.3358,
                 "description": "Upscale Northern Italian culinary tasting menus with sommelier wine pairings.",
                 "amenities": ["valet parking", "private dining", "fine dining"],
                 "opening_hours": "5:30 PM - 11:00 PM",
@@ -494,6 +513,9 @@ class MockWebSearchClient:
                 "price_tier": "$$$$",
                 "address": "86 Pine St, Downtown",
                 "location": "Downtown",
+                "sector": "Downtown",
+                "latitude": 47.6098,
+                "longitude": -122.3432,
                 "description": "World-renowned omakase sushi experience overlooking the water, curated by legendary master chefs.",
                 "amenities": ["omakase bar", "waterfront view", "reservations recommended"],
                 "opening_hours": "5:00 PM - 10:00 PM",
@@ -506,6 +528,9 @@ class MockWebSearchClient:
                 "price_tier": "$$",
                 "address": "310 University St, Downtown",
                 "location": "Downtown",
+                "sector": "Downtown",
+                "latitude": 47.6079,
+                "longitude": -122.3347,
                 "description": "Fresh sashimi rolls, crispy chicken karaage, and authentic ramen bowls.",
                 "amenities": ["quick service", "casual", "takeout"],
                 "opening_hours": "11:00 AM - 9:00 PM",
@@ -519,6 +544,9 @@ class MockWebSearchClient:
                 "price_tier": "$",
                 "address": "902 4th Ave, Downtown",
                 "location": "Downtown",
+                "sector": "Downtown",
+                "latitude": 47.6062,
+                "longitude": -122.3321,
                 "description": "Street-style birria tacos, house-made horchata, and vibrant roasted salsa bar.",
                 "amenities": ["casual", "fast casual", "spicy options"],
                 "opening_hours": "10:30 AM - 10:00 PM",
@@ -532,6 +560,9 @@ class MockWebSearchClient:
                 "price_tier": "$",
                 "address": "520 Olive Way, Downtown",
                 "location": "Downtown",
+                "sector": "Downtown",
+                "latitude": 47.6133,
+                "longitude": -122.3364,
                 "description": "Specialty single-origin espresso drinks, artisan pastries, and blazing-fast high-speed wifi.",
                 "amenities": ["wifi", "work friendly", "vegan pastries"],
                 "opening_hours": "6:30 AM - 6:00 PM",
@@ -545,6 +576,9 @@ class MockWebSearchClient:
                 "price_tier": "Free",
                 "address": "Pier 62, Alaskan Way, Downtown",
                 "location": "Downtown",
+                "sector": "Downtown",
+                "latitude": 47.6075,
+                "longitude": -122.3429,
                 "description": "Scenic waterfront walking trail with panoramic mountain and bay views, public art, and breeze.",
                 "amenities": ["wheelchair accessible", "family friendly", "dog friendly"],
                 "opening_hours": "6:00 AM - 11:00 PM",
@@ -557,6 +591,9 @@ class MockWebSearchClient:
                 "price_tier": "Free",
                 "address": "2901 Western Ave, Seattle",
                 "location": "Seattle",
+                "sector": "Seattle",
+                "latitude": 47.6166,
+                "longitude": -122.3553,
                 "description": "Nine-acre open-air museum featuring monumental outdoor sculptures along Puget Sound.",
                 "amenities": ["beach access", "free admission", "photography"],
                 "opening_hours": "Sunrise - Sunset",
@@ -569,11 +606,141 @@ class MockWebSearchClient:
                 "price_tier": "$$",
                 "address": "1300 1st Ave, Downtown",
                 "location": "Downtown",
+                "sector": "Downtown",
+                "latitude": 47.6073,
+                "longitude": -122.3382,
                 "description": "Inspiring global modern art installations, rotating contemporary exhibits, and guided tours.",
                 "amenities": ["audio guide", "cafe", "gift shop"],
                 "opening_hours": "10:00 AM - 5:00 PM",
             },
+            # Authentic Colombian Establishments (Requirement R4 / Milestone M13)
+            {
+                "name": "Criterión",
+                "category": "dining",
+                "cuisine": "Contemporary",
+                "rating": 4.9,
+                "price_tier": "$$$$",
+                "address": "Calle 69A # 5-75, Zona G, Bogotá",
+                "location": "Zona G",
+                "sector": "Zona G",
+                "latitude": 4.6521,
+                "longitude": -74.0558,
+                "description": "Alta cocina de autor de los hermanos Rausch en el corazón de la Zona G.",
+                "amenities": ["reservas", "valet parking", "carta de vinos"],
+                "opening_hours": "12:00 PM - 11:00 PM",
+            },
+            {
+                "name": "El Chato",
+                "category": "dining",
+                "cuisine": "Colombiana Contemporánea",
+                "rating": 4.9,
+                "price_tier": "$$$",
+                "address": "Calle 65 # 4-76, Chapinero Alto, Bogotá",
+                "location": "Chapinero",
+                "sector": "Chapinero",
+                "latitude": 4.6489,
+                "longitude": -74.0592,
+                "description": "Bistró de autor premiado internacionalmente con ingredientes colombianos locales.",
+                "amenities": ["reservas", "terraza", "cócteles de autor"],
+                "opening_hours": "12:00 PM - 11:00 PM",
+            },
+            {
+                "name": "Abasto",
+                "category": "dining",
+                "cuisine": "Colombiana Artesanal",
+                "rating": 4.7,
+                "price_tier": "$$",
+                "address": "Carrera 6 # 119B-52, Usaquén, Bogotá",
+                "location": "Usaquén",
+                "sector": "Usaquén",
+                "latitude": 4.6961,
+                "longitude": -74.0305,
+                "description": "Cocina de campo y mercado artesanal con productos de origen en Usaquén.",
+                "amenities": ["wifi", "desayuno", "café de origen"],
+                "opening_hours": "8:00 AM - 10:00 PM",
+            },
+            {
+                "name": "La Puerta Falsa",
+                "category": "dining",
+                "cuisine": "Tradicional Santafereña",
+                "rating": 4.8,
+                "price_tier": "$",
+                "address": "Calle 11 # 6-50, La Candelaria, Bogotá",
+                "location": "La Candelaria",
+                "sector": "La Candelaria",
+                "latitude": 4.5983,
+                "longitude": -74.0754,
+                "description": "El restaurante más antiguo de Bogotá, famoso por su tamal, chocolate y ajiaco.",
+                "amenities": ["tradicional", "para llevar"],
+                "opening_hours": "7:00 AM - 8:00 PM",
+            },
+            {
+                "name": "Andrés D.C.",
+                "category": "dining",
+                "cuisine": "Colombiana & Parrilla",
+                "rating": 4.8,
+                "price_tier": "$$$",
+                "address": "Calle 82 # 12-21, El Retiro, Bogotá",
+                "location": "Chapinero",
+                "sector": "Chapinero",
+                "latitude": 4.6668,
+                "longitude": -74.0552,
+                "description": "Restaurante y fiesta emblemática en 4 pisos temáticos inspirados en la Divina Comedia.",
+                "amenities": ["música en vivo", "parrilla", "cócteles", "reservas"],
+                "opening_hours": "12:00 PM - 2:00 AM",
+            },
+            {
+                "name": "Cervecería Parque 93",
+                "category": "nightlife",
+                "cuisine": "Gastropub",
+                "rating": 4.6,
+                "price_tier": "$$",
+                "address": "Carrera 11A # 93-42, Parque 93, Bogotá",
+                "location": "Parque 93",
+                "sector": "Parque 93",
+                "latitude": 4.6765,
+                "longitude": -74.0483,
+                "description": "Cervezas artesanales colombianas y comida de taberna frente al Parque de la 93.",
+                "amenities": ["wifi", "terraza pet-friendly", "cerveza artesanal"],
+                "opening_hours": "12:00 PM - 1:00 AM",
+            },
+            {
+                "name": "Carmen Medellín",
+                "category": "dining",
+                "cuisine": "Colombiana Contemporánea",
+                "rating": 4.9,
+                "price_tier": "$$$$",
+                "address": "Carrera 36 # 10A-27, El Poblado, Medellín",
+                "location": "El Poblado",
+                "sector": "El Poblado",
+                "latitude": 6.2088,
+                "longitude": -75.5683,
+                "description": "Cocina de autor moderna con ingredientes de la biodiversidad colombiana.",
+                "amenities": ["reservas", "terraza", "maridaje"],
+                "opening_hours": "12:00 PM - 10:30 PM",
+            },
+            {
+                "name": "Mondongo's Laureles",
+                "category": "dining",
+                "cuisine": "Tradicional Paisa",
+                "rating": 4.7,
+                "price_tier": "$$",
+                "address": "Circular 73 # 38-16, Laureles, Medellín",
+                "location": "Laureles",
+                "sector": "Laureles",
+                "latitude": 6.2442,
+                "longitude": -75.5906,
+                "description": "Ícono de la comida típica antioqueña, famoso por su mondongo y bandeja paisa.",
+                "amenities": ["familiar", "porciones generosas", "parqueadero"],
+                "opening_hours": "11:30 AM - 9:00 PM",
+            },
         ]
+
+        for p in catalog:
+            q_str = f"{p['name']}, {p.get('address', '')}"
+            p["maps_url"] = f"https://www.google.com/maps/search/?api=1&query={urllib.parse.quote_plus(q_str)}"
+
+        return catalog
 
     def search(
         self,
@@ -581,41 +748,125 @@ class MockWebSearchClient:
         location: Optional[str] = None,
         category: Optional[str] = None,
         budget: Optional[str] = None,
+        coordinates: Optional[Tuple[float, float]] = None,
     ) -> List[Dict[str, Any]]:
         """Deterministic search matching query terms across place records."""
-        q_lower = query.lower()
+        q_lower = query.lower() if query else ""
 
         # Handle zero-result boundary test query specifically
         if "antarctic" in q_lower or "sahara" in q_lower:
             return []
 
+        if coordinates:
+            lat, lon = coordinates
+            if not (-90.0 <= lat <= 90.0 and -180.0 <= lon <= 180.0):
+                raise ValueError(
+                    f"Coordinates ({lat}, {lon}) out of valid range: lat in [-90, 90], lon in [-180, 180]."
+                )
+
+        clean_loc = _normalize_text(location) if location else ""
+
         results = []
         for place in self._places:
-            # Score relevance
-            text_corpus = f"{place['name']} {place['category']} {place['cuisine']} {place['location']} {place['address']} {place['description']} {' '.join(place.get('amenities', []))}".lower()
+            text_corpus = (
+                f"{place['name']} {place['category']} {place['cuisine']} {place['location']} "
+                f"{place.get('sector', '')} {place['address']} {place['description']} "
+                f"{' '.join(place.get('amenities', []))}"
+            ).lower()
+            text_norm = _normalize_text(text_corpus)
 
-            matches = False
-            # Check keywords
+            matches_coords = False
+            if coordinates:
+                v_lat = place.get("latitude")
+                v_lon = place.get("longitude")
+                if v_lat is not None and v_lon is not None:
+                    lat, lon = coordinates
+                    dist_km = math.sqrt((lat - v_lat) ** 2 + (lon - v_lon) ** 2) * 111.0
+                    if dist_km < 8.0:
+                        matches_coords = True
+
+            matches_loc = False
+            if clean_loc:
+                p_loc = _normalize_text(place.get("location", ""))
+                p_sec = _normalize_text(place.get("sector", ""))
+                p_addr = _normalize_text(place.get("address", ""))
+                if (
+                    clean_loc in p_loc
+                    or p_loc in clean_loc
+                    or clean_loc in p_sec
+                    or p_sec in clean_loc
+                    or clean_loc in p_addr
+                ):
+                    matches_loc = True
+
+            matches_q = False
             for word in q_lower.split():
-                if len(word) > 2 and word in text_corpus:
-                    matches = True
+                norm_w = _normalize_text(word)
+                if len(norm_w) > 2 and (norm_w in text_norm or norm_w in clean_loc):
+                    matches_q = True
                     break
 
-            if location and location.lower() in place["location"].lower():
-                matches = True
+            matches_cat = False
+            if category:
+                cat_lower = category.lower()
+                if (
+                    cat_lower in place["category"].lower()
+                    or cat_lower in place["cuisine"].lower()
+                    or category.capitalize() == place.get("category")
+                    or category.capitalize() == place.get("cuisine")
+                ):
+                    matches_cat = True
 
-            if category and (category.lower() in place["category"].lower() or category.lower() in place["cuisine"].lower()):
-                matches = True
+            if coordinates:
+                if matches_coords:
+                    results.append(place)
+            else:
+                if matches_loc:
+                    results.append(place)
+                elif not clean_loc and (matches_q or matches_cat):
+                    results.append(place)
 
-            if matches:
-                results.append(place)
+        # If location was specified but no direct location matches, fall back to query term matches
+        if location and not results and not coordinates:
+            for place in self._places:
+                text_corpus = (
+                    f"{place['name']} {place['category']} {place['cuisine']} {place['location']} "
+                    f"{place.get('sector', '')} {place['address']} {place['description']} "
+                    f"{' '.join(place.get('amenities', []))}"
+                ).lower()
+                text_norm = _normalize_text(text_corpus)
+                matches_q = any(
+                    len(_normalize_text(w)) > 2
+                    and _normalize_text(w) not in {"near", "en", "el", "la", "de", "para", "por", "the"}
+                    and _normalize_text(w) in text_norm
+                    for w in q_lower.split()
+                )
+                if matches_q:
+                    results.append(place)
 
-        # If specific filters yielded nothing, return top places matching category or general top 3
+        # If a specific location or coordinates was requested and yielded nothing, return []
+        if (location or coordinates) and not results:
+            return []
+
+        # If no specific location/coords were provided and no results found, return general top places
         if not results:
             for place in self._places:
-                if any(kw in place["category"].lower() or kw in place["cuisine"].lower() for kw in ["italian", "sushi", "cafe", "outdoor"]):
+                if any(
+                    kw in place["category"].lower() or kw in place["cuisine"].lower()
+                    for kw in ["italian", "sushi", "cafe", "outdoor"]
+                ):
                     results.append(place)
                 if len(results) >= 3:
                     break
 
-        return results[:5]
+        out = []
+        for p in results[:5]:
+            item = dict(p)
+            if "maps_url" not in item or not item["maps_url"]:
+                query_str = f"{item['name']}, {item.get('address', '')}"
+                item["maps_url"] = (
+                    f"https://www.google.com/maps/search/?api=1&query={urllib.parse.quote_plus(query_str)}"
+                )
+            out.append(item)
+
+        return out

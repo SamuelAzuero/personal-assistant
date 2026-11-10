@@ -48,6 +48,34 @@ document.addEventListener("DOMContentLoaded", () => {
   const btnCancelSub = document.getElementById("btn-cancel-sub");
   const subForm = document.getElementById("sub-form");
 
+  // M11 Elements - Direct Account Balance Operations (Deposit / Withdraw)
+  const accountOpDialog = document.getElementById("account-op-dialog");
+  const btnCloseAccountOp = document.getElementById("btn-close-account-op-dialog");
+  const btnCancelAccountOp = document.getElementById("btn-cancel-account-op");
+  const accountOpForm = document.getElementById("account-op-form");
+  const accountOpTypeSelect = document.getElementById("account-op-type");
+  const accountOpAmountInput = document.getElementById("account-op-amount");
+  const accountOpAmountRaw = document.getElementById("account-op-amount-raw");
+  const accountOpTargetName = document.getElementById("account-op-target-name");
+  const accountOpCurrentBalance = document.getElementById("account-op-current-balance");
+  const accountOpAccountId = document.getElementById("account-op-account-id");
+  const accountOpAccountName = document.getElementById("account-op-account-name");
+  const accountOpDialogTitle = document.getElementById("account-op-title");
+  const accountOpSubmitBtn = document.getElementById("btn-submit-account-op");
+  const accountOpConcept = document.getElementById("account-op-concept");
+  const accountOpNotes = document.getElementById("account-op-notes");
+
+  // M12 Elements — Debt Modifications & Installments
+  const debtEditDialog = document.getElementById("debt-edit-dialog");
+  const btnCloseDebtEdit = document.getElementById("btn-close-debt-edit-dialog");
+  const btnCancelDebtEdit = document.getElementById("btn-cancel-debt-edit");
+  const debtEditForm = document.getElementById("debt-edit-form");
+
+  const installmentPayDialog = document.getElementById("installment-pay-dialog");
+  const btnCloseInstallment = document.getElementById("btn-close-installment-dialog");
+  const btnCancelInstallment = document.getElementById("btn-cancel-installment");
+  const installmentPayForm = document.getElementById("installment-pay-form");
+
   const btnRefresh = document.getElementById("btn-refresh");
   const txFilterType = document.getElementById("transaction-filter-type");
   const taskFilterStatus = document.getElementById("task-filter-status");
@@ -185,6 +213,8 @@ document.addEventListener("DOMContentLoaded", () => {
         d.setDate(d.getDate() + 7);
         dateInput.value = d.toISOString().split("T")[0];
       }
+      const debtInstGrp = document.getElementById("debt-installment-group");
+      if (debtInstGrp) debtInstGrp.classList.add("hidden");
     }
     showModalSafe(debtDialog);
   };
@@ -197,12 +227,39 @@ document.addEventListener("DOMContentLoaded", () => {
     btnCancelDebt.addEventListener("click", () => closeModalSafe(debtDialog));
   }
 
+  // Debt Installment Checkbox Toggle
+  const debtIsInstallmentChk = document.getElementById("debt-is-installment");
+  const debtInstallmentGroup = document.getElementById("debt-installment-group");
+  if (debtIsInstallmentChk && debtInstallmentGroup) {
+    debtIsInstallmentChk.addEventListener("change", () => {
+      if (debtIsInstallmentChk.checked) {
+        debtInstallmentGroup.classList.remove("hidden");
+      } else {
+        debtInstallmentGroup.classList.add("hidden");
+      }
+    });
+  }
+
   // Settle Dialog Cancel
   if (btnCloseSettle && settleDialog) {
     btnCloseSettle.addEventListener("click", () => closeModalSafe(settleDialog));
   }
   if (btnCancelSettle && settleDialog) {
     btnCancelSettle.addEventListener("click", () => closeModalSafe(settleDialog));
+  }
+
+  // M12 Dialogs: Debt Edit and Installment Pay Cancel & Close
+  if (btnCloseDebtEdit && debtEditDialog) {
+    btnCloseDebtEdit.addEventListener("click", () => closeModalSafe(debtEditDialog));
+  }
+  if (btnCancelDebtEdit && debtEditDialog) {
+    btnCancelDebtEdit.addEventListener("click", () => closeModalSafe(debtEditDialog));
+  }
+  if (btnCloseInstallment && installmentPayDialog) {
+    btnCloseInstallment.addEventListener("click", () => closeModalSafe(installmentPayDialog));
+  }
+  if (btnCancelInstallment && installmentPayDialog) {
+    btnCancelInstallment.addEventListener("click", () => closeModalSafe(installmentPayDialog));
   }
 
   // Subscription Dialog
@@ -227,8 +284,19 @@ document.addEventListener("DOMContentLoaded", () => {
     btnCancelSub.addEventListener("click", () => closeModalSafe(subDialog));
   }
 
+  // Account Operations Dialog Cancel & Close
+  if (btnCloseAccountOp && accountOpDialog) {
+    btnCloseAccountOp.addEventListener("click", () => closeModalSafe(accountOpDialog));
+  }
+  if (btnCancelAccountOp && accountOpDialog) {
+    btnCancelAccountOp.addEventListener("click", () => closeModalSafe(accountOpDialog));
+  }
+
   // Close modals on clicking backdrop strictly via event target isolation
-  [txDialog, taskDialog, transferDialog, debtDialog, settleDialog, subDialog].forEach(dialog => {
+  [
+    txDialog, taskDialog, transferDialog, debtDialog, settleDialog, subDialog, accountOpDialog,
+    debtEditDialog, installmentPayDialog
+  ].forEach(dialog => {
     if (!dialog) return;
 
     let isBackdropTarget = false;
@@ -285,6 +353,9 @@ document.addEventListener("DOMContentLoaded", () => {
             "btn-submit-debt": "Guardar Registro",
             "btn-submit-settle": "Confirmar Pago",
             "btn-submit-sub": "Guardar Suscripción",
+            "btn-submit-account-op": "Confirmar Operación",
+            "btn-submit-debt-edit": "Guardar Cambios",
+            "btn-submit-installment": "Confirmar Pago de Cuotas",
           };
           if (defaultTexts[submitBtn.id]) {
             submitBtn.textContent = defaultTexts[submitBtn.id];
@@ -598,39 +669,170 @@ document.addEventListener("DOMContentLoaded", () => {
     }
   }
 
-  async function loadOutings() {
+  // ================= M13: Outings & Recommendations UI =================
+
+  async function loadOutings(sector = "", query = "") {
     const container = document.getElementById("outings-list");
+    const countBadge = document.getElementById("outings-count-badge");
+    const sectorSelect = document.getElementById("outings-sector-select");
+    const searchInput = document.getElementById("outings-search-input");
+    const searchBtn = document.getElementById("btn-search-outings");
+
     if (!container) return;
 
+    // Use current input values if parameters are not explicitly passed
+    const activeSector = sector !== "" ? sector : (sectorSelect ? sectorSelect.value : "Chapinero");
+    const activeQuery = query !== "" ? query : (searchInput ? searchInput.value.trim() : "");
+
+    // Display inline loading feedback
+    container.innerHTML = `
+      <div class="muted-row">
+        <span class="spinner-inline">⏳</span> Buscando lugares en <strong>${escapeHtml(activeSector === "all" ? "todos los sectores" : activeSector)}</strong>...
+      </div>
+    `;
+
+    if (searchBtn) {
+      searchBtn.disabled = true;
+      searchBtn.innerHTML = `<span>⏳</span> Buscando...`;
+    }
+
     try {
-      const res = await fetch("/api/research/outings?location=downtown");
-      if (!res.ok) throw new Error("Failed to load outings");
+      const params = new URLSearchParams();
+      if (activeSector && activeSector !== "all") {
+        params.append("sector", activeSector);
+        params.append("location", activeSector);
+      }
+      if (activeQuery) {
+        params.append("query", activeQuery);
+      }
+
+      const queryString = params.toString();
+      const url = queryString ? `/api/research/outings?${queryString}` : "/api/research/outings";
+
+      const res = await fetch(url);
+      if (!res.ok) throw new Error(`HTTP ${res.status}: Error al obtener recomendaciones`);
       const places = await res.json();
 
-      const items = (Array.isArray(places) ? places : []).slice(0, 3);
+      const items = Array.isArray(places) ? places : [];
+
+      if (countBadge) {
+        countBadge.textContent = `${items.length} ${items.length === 1 ? 'Lugar' : 'Lugares'}`;
+      }
+
       if (items.length === 0) {
-        container.innerHTML = `<div class="muted-row">No se encontraron recomendaciones en este momento.</div>`;
+        container.innerHTML = `
+          <div class="muted-row">
+            No se encontraron lugares en <em>${escapeHtml(activeSector === 'all' ? 'este criterio' : activeSector)}</em> para "${escapeHtml(activeQuery || 'todo')}".<br>
+            <span class="text-dim">Prueba seleccionando otro sector o ampliando los términos de búsqueda.</span>
+          </div>
+        `;
         return;
       }
 
-      container.innerHTML = items.map(p => `
-        <div class="widget-item">
-          <div class="widget-item-title">
-            ${escapeHtml(p.name || "Lugar")} 
-            <span class="text-primary">(${p.rating || "4.5"} ⭐ | ${p.price_tier || "$$"})</span>
-          </div>
-          <div class="widget-item-snippet">${escapeHtml(p.description || "")}</div>
-          <div class="widget-item-meta">
-            <span>📍 ${escapeHtml(p.address || "Zona Rosa / Centro")}</span>
-            ${p.amenities ? `<span>✨ ${escapeHtml(p.amenities.join(", "))}</span>` : ''}
-          </div>
+      container.innerHTML = `
+        <div class="venue-cards-list">
+          ${items.map(p => {
+            const name = escapeHtml(p.name || "Lugar Recomendado");
+            const cuisine = escapeHtml(p.cuisine || p.category || "Gastronomía");
+            const rating = p.rating ? Number(p.rating).toFixed(1) : "4.8";
+            const priceTier = escapeHtml(p.price_tier || "$$");
+            const sectorName = escapeHtml(p.sector || p.location || activeSector || "Bogotá");
+            const address = escapeHtml(p.address || "");
+            const description = escapeHtml(p.description || "");
+            const amenities = Array.isArray(p.amenities) ? p.amenities : [];
+
+            // Build fallback universal Google Maps URL if missing
+            const mapsUrl = p.maps_url || (
+              "https://www.google.com/maps/search/?api=1&query=" +
+              encodeURIComponent(`${p.name || ''}, ${p.address || sectorName}`)
+            );
+
+            return `
+              <article class="venue-card">
+                <div class="venue-card-header">
+                  <div class="venue-title-group">
+                    <h3 class="venue-name">${name}</h3>
+                    <div class="venue-badges">
+                      <span class="badge badge-info venue-badge">${cuisine}</span>
+                      <span class="badge badge-muted venue-badge">📍 ${sectorName}</span>
+                    </div>
+                  </div>
+                  <div class="venue-meta-rating">
+                    <span class="venue-rating" title="Calificación promedio">⭐ ${rating}</span>
+                    <span class="venue-price" title="Rango de precio">${priceTier}</span>
+                  </div>
+                </div>
+
+                ${description ? `<p class="venue-description">${description}</p>` : ''}
+
+                <div class="venue-footer">
+                  <div class="venue-address-info">
+                    ${address ? `<span class="venue-address" title="${address}">📍 ${address}</span>` : ''}
+                    ${amenities.length > 0 ? `
+                      <div class="venue-amenities">
+                        ${amenities.slice(0, 3).map(a => `<span class="amenity-pill">✨ ${escapeHtml(a)}</span>`).join("")}
+                      </div>
+                    ` : ''}
+                  </div>
+                  <div class="venue-actions">
+                    <a
+                      href="${escapeHtml(mapsUrl)}"
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      class="btn btn-secondary btn-sm btn-maps-direct"
+                      aria-label="Ver ${name} en Google Maps"
+                    >
+                      🗺️ Ver en Google Maps
+                    </a>
+                  </div>
+                </div>
+              </article>
+            `;
+          }).join("")}
         </div>
-      `).join("");
+      `;
     } catch (err) {
       console.error("Error loading outings:", err);
-      container.innerHTML = `<div class="muted-row text-muted">Servicio de planes en modo simulado / sin conexión.</div>`;
+      if (countBadge) countBadge.textContent = "Modo Local";
+      container.innerHTML = `
+        <div class="muted-row text-muted">
+          Servicio de búsqueda geolocalizada en modo local / sin conexión.
+        </div>
+      `;
+    } finally {
+      if (searchBtn) {
+        searchBtn.disabled = false;
+        searchBtn.innerHTML = `<span>🔍</span> Buscar Lugares`;
+      }
     }
   }
+
+  // Setup Event Listeners for Outings Controls
+  const outingsSectorSelect = document.getElementById("outings-sector-select");
+  const outingsSearchInput = document.getElementById("outings-search-input");
+  const btnSearchOutings = document.getElementById("btn-search-outings");
+
+  if (outingsSectorSelect) {
+    outingsSectorSelect.addEventListener("change", () => {
+      loadOutings(outingsSectorSelect.value, outingsSearchInput ? outingsSearchInput.value.trim() : "");
+    });
+  }
+
+  if (btnSearchOutings) {
+    btnSearchOutings.addEventListener("click", () => {
+      loadOutings(outingsSectorSelect ? outingsSectorSelect.value : "", outingsSearchInput ? outingsSearchInput.value.trim() : "");
+    });
+  }
+
+  if (outingsSearchInput) {
+    outingsSearchInput.addEventListener("keydown", (e) => {
+      if (e.key === "Enter") {
+        e.preventDefault();
+        loadOutings(outingsSectorSelect ? outingsSectorSelect.value : "", outingsSearchInput.value.trim());
+      }
+    });
+  }
+
 
   // ================= Form Submissions =================
 
@@ -796,17 +998,37 @@ document.addEventListener("DOMContentLoaded", () => {
         const icon = acc.icon || iconMap[acc.name.toLowerCase()] || "💳";
         const share = acc.percentage_share !== undefined ? acc.percentage_share : 0;
         const color = acc.color || "#4f46e5";
+        const accId = acc.id || acc.account_id || acc.name.toLowerCase();
+        const accBalance = acc.balance !== undefined ? acc.balance : ((acc.balance_cents || 0) / 100);
         html += `
           <div class="account-card" style="border-top: 4px solid ${escapeHtml(color)}">
             <div class="account-header">
               <span class="account-icon">${icon}</span>
               <span class="account-type-tag">${escapeHtml(acc.name)}</span>
             </div>
-            <div class="account-balance">${formatCurrency(acc.balance || (acc.balance_cents / 100))}</div>
+            <div class="account-balance">${formatCurrency(accBalance)}</div>
             <div class="account-share-bar">
               <div class="account-share-fill" style="width: ${Math.min(100, Math.max(0, share))}%; background: ${escapeHtml(color)}"></div>
             </div>
             <div class="account-footer">${share}% del patrimonio neto</div>
+            <div class="account-actions">
+              <button type="button" class="btn btn-sm btn-outline-success btn-account-op"
+                data-id="${escapeHtml(accId)}"
+                data-name="${escapeHtml(acc.name)}"
+                data-balance="${accBalance}"
+                data-action="deposit"
+                title="Depositar fondos en ${escapeHtml(acc.name)}">
+                ➕ Depositar
+              </button>
+              <button type="button" class="btn btn-sm btn-outline-danger btn-account-op"
+                data-id="${escapeHtml(accId)}"
+                data-name="${escapeHtml(acc.name)}"
+                data-balance="${accBalance}"
+                data-action="withdraw"
+                title="Retirar fondos de ${escapeHtml(acc.name)}">
+                ➖ Retirar
+              </button>
+            </div>
           </div>
         `;
       });
@@ -838,102 +1060,297 @@ document.addEventListener("DOMContentLoaded", () => {
       if (recBadge) recBadge.textContent = formatCurrency(totalRec / 100);
       if (payBadge) payBadge.textContent = formatCurrency(totalPay / 100);
 
-      if (recTbody) {
-        if (receivables.length === 0) {
-          recTbody.innerHTML = '<tr><td colspan="7" class="text-center muted-row">No tienes cobros pendientes 🎉</td></tr>';
-        } else {
-          recTbody.innerHTML = receivables.map(d => {
-            const dueDateStr = d.due_date ? String(d.due_date).substring(0, 10) : "Sin fecha";
-            const badgeClass = d.status === "partially_paid" ? "badge-warning" : "badge-info";
-            const statusLabel = d.status === "partially_paid" ? "Abono Parcial" : "Pendiente";
-            return `
-              <tr>
-                <td><strong>${escapeHtml(d.counterparty)}</strong></td>
-                <td>${escapeHtml(d.reason)}</td>
-                <td><span class="badge badge-light">${escapeHtml(d.account_name || "Efectivo")}</span></td>
-                <td>${formatCurrency(d.remaining_amount || (d.remaining_cents / 100))}</td>
-                <td>${dueDateStr}</td>
-                <td><span class="badge ${badgeClass}">${statusLabel}</span></td>
-                <td class="text-center">
-                  <button class="btn btn-sm btn-outline-success btn-open-settle"
-                    data-id="${escapeHtml(d.id || d.debt_id)}"
-                    data-counterparty="${escapeHtml(d.counterparty)}"
-                    data-remaining="${d.remaining_amount || (d.remaining_cents / 100)}"
-                    data-cents="${d.remaining_cents}"
-                    data-type="receivable">Abonar / Liquidar</button>
-                </td>
-              </tr>
-            `;
-          }).join("");
+      // Render helper for debt row
+      const renderDebtRow = (d, type) => {
+        const isRec = type === "receivable";
+        const id = d.id || d.debt_id;
+        const isInst = Boolean(d.is_installment);
+        const totalInst = parseInt(d.total_installments, 10) || 1;
+        const remInst = d.remaining_installments != null ? parseInt(d.remaining_installments, 10) : totalInst;
+        const paidInst = Math.max(0, totalInst - remInst);
+        const currentCuota = Math.min(totalInst, paidInst + 1);
+        const progressPct = totalInst > 0 ? Math.round((paidInst / totalInst) * 100) : 0;
+        const instAmt = (d.installment_amount_cents || 0) / 100;
+
+        // Due date calculation
+        let dueDateDisplay = "Sin fecha";
+        let dueSubtext = "";
+        if (isInst && d.next_installment_due_date) {
+          dueDateDisplay = String(d.next_installment_due_date).substring(0, 10);
+          dueSubtext = '<span class="debt-sub-info text-warning">Próx. cuota</span>';
+        } else if (d.due_date) {
+          dueDateDisplay = String(d.due_date).substring(0, 10);
         }
+
+        // Status / Cuota badge
+        let statusHtml = "";
+        if (isInst) {
+          statusHtml = `
+            <div class="debt-installment-status">
+              <div class="d-flex justify-between align-center">
+                <span class="badge badge-installment" title="${remInst} cuotas restantes">Cuota ${currentCuota}/${totalInst}</span>
+                <span class="debt-sub-info">${progressPct}%</span>
+              </div>
+              <div class="debt-progress-container" title="${paidInst} de ${totalInst} cuotas pagadas">
+                <div class="debt-progress-bar ${isRec ? 'bg-success' : 'bg-primary'}" style="width: ${progressPct}%;"></div>
+              </div>
+            </div>
+          `;
+        } else {
+          const badgeClass = d.status === "partially_paid" ? "badge-warning" : (isRec ? "badge-info" : "badge-danger");
+          const statusLabel = d.status === "partially_paid" ? "Abono Parcial" : "Pendiente";
+          statusHtml = `<span class="badge ${badgeClass}">${statusLabel}</span>`;
+        }
+
+        // Amount display
+        const remAmount = d.remaining_amount || (d.remaining_cents / 100);
+        let amountHtml = `<strong>${formatCurrency(remAmount)}</strong>`;
+        if (isInst && instAmt > 0) {
+          amountHtml += `<span class="debt-sub-info">${formatCurrency(instAmt)} / cuota</span>`;
+        }
+
+        // Action Buttons
+        const editBtn = `
+          <button class="btn btn-sm btn-outline-secondary btn-edit-debt"
+            data-id="${escapeHtml(id)}"
+            data-counterparty="${escapeHtml(d.counterparty)}"
+            data-amount="${d.amount || (d.amount_cents / 100)}"
+            data-reason="${escapeHtml(d.reason)}"
+            data-due-date="${d.due_date ? String(d.due_date).substring(0, 10) : ''}"
+            data-status="${escapeHtml(d.status || 'active')}"
+            data-is-installment="${isInst ? 'true' : 'false'}"
+            title="Editar deuda o fecha">✏️ Editar</button>
+        `;
+
+        const payInstBtn = (isInst && remInst > 0) ? `
+          <button class="btn btn-sm btn-primary btn-pay-installment"
+            data-id="${escapeHtml(id)}"
+            data-counterparty="${escapeHtml(d.counterparty)}"
+            data-total-installments="${totalInst}"
+            data-remaining-installments="${remInst}"
+            data-installment-amount="${instAmt}"
+            data-remaining-amount="${remAmount}"
+            data-remaining-cents="${d.remaining_cents}"
+            data-type="${type}"
+            title="Pagar una o más cuotas">💳 Pagar Cuota</button>
+        ` : '';
+
+        const settleBtn = `
+          <button class="btn btn-sm btn-outline-success btn-open-settle"
+            data-id="${escapeHtml(id)}"
+            data-counterparty="${escapeHtml(d.counterparty)}"
+            data-remaining="${remAmount}"
+            data-cents="${d.remaining_cents}"
+            data-type="${type}"
+            title="Abono libre o liquidación total">${isInst ? 'Abono Libre' : (isRec ? 'Abonar / Liquidar' : 'Pagar / Abonar')}</button>
+        `;
+
+        return `
+          <tr>
+            <td>
+              <strong>${escapeHtml(d.counterparty)}</strong>
+              ${isInst ? '<span class="badge badge-light debt-sub-info">Plan Cuotas</span>' : ''}
+            </td>
+            <td>
+              ${escapeHtml(d.reason)}
+              ${isInst && d.payment_frequency ? `<span class="debt-sub-info">Frecuencia: ${escapeHtml(d.payment_frequency)}</span>` : ''}
+            </td>
+            <td><span class="badge badge-light">${escapeHtml(d.account_name || "Efectivo")}</span></td>
+            <td>${amountHtml}</td>
+            <td>${dueDateDisplay}${dueSubtext}</td>
+            <td>${statusHtml}</td>
+            <td class="text-center">
+              <div class="debt-action-buttons">
+                ${editBtn}
+                ${payInstBtn}
+                ${settleBtn}
+              </div>
+            </td>
+          </tr>
+        `;
+      };
+
+      if (recTbody) {
+        recTbody.innerHTML = receivables.length === 0
+          ? '<tr><td colspan="7" class="text-center muted-row">No tienes cobros pendientes 🎉</td></tr>'
+          : receivables.map(d => renderDebtRow(d, "receivable")).join("");
       }
 
       if (payTbody) {
-        if (payables.length === 0) {
-          payTbody.innerHTML = '<tr><td colspan="7" class="text-center muted-row">No tienes deudas pendientes 🎉</td></tr>';
-        } else {
-          payTbody.innerHTML = payables.map(d => {
-            const dueDateStr = d.due_date ? String(d.due_date).substring(0, 10) : "Sin fecha";
-            const badgeClass = d.status === "partially_paid" ? "badge-warning" : "badge-danger";
-            const statusLabel = d.status === "partially_paid" ? "Abono Parcial" : "Pendiente";
-            return `
-              <tr>
-                <td><strong>${escapeHtml(d.counterparty)}</strong></td>
-                <td>${escapeHtml(d.reason)}</td>
-                <td><span class="badge badge-light">${escapeHtml(d.account_name || "Efectivo")}</span></td>
-                <td>${formatCurrency(d.remaining_amount || (d.remaining_cents / 100))}</td>
-                <td>${dueDateStr}</td>
-                <td><span class="badge ${badgeClass}">${statusLabel}</span></td>
-                <td class="text-center">
-                  <button class="btn btn-sm btn-outline-primary btn-open-settle"
-                    data-id="${escapeHtml(d.id || d.debt_id)}"
-                    data-counterparty="${escapeHtml(d.counterparty)}"
-                    data-remaining="${d.remaining_amount || (d.remaining_cents / 100)}"
-                    data-cents="${d.remaining_cents}"
-                    data-type="debt">Pagar / Abonar</button>
-                </td>
-              </tr>
-            `;
-          }).join("");
-        }
+        payTbody.innerHTML = payables.length === 0
+          ? '<tr><td colspan="7" class="text-center muted-row">No tienes deudas pendientes 🎉</td></tr>'
+          : payables.map(d => renderDebtRow(d, "debt")).join("");
       }
-
-      document.querySelectorAll(".btn-open-settle").forEach(btn => {
-        btn.addEventListener("click", () => {
-          const debtId = btn.getAttribute("data-id");
-          const counterparty = btn.getAttribute("data-counterparty");
-          const remaining = btn.getAttribute("data-remaining");
-          const type = btn.getAttribute("data-type");
-
-          const settleIdInput = document.getElementById("settle-debt-id");
-          const settleAmtInput = document.getElementById("settle-amount");
-          if (settleIdInput) settleIdInput.value = debtId;
-          if (settleAmtInput) settleAmtInput.value = "";
-
-          if (settleSummaryBox) {
-            const typeLabel = type === "receivable" ? "Cobro a favor de:" : "Deuda por pagar a:";
-            settleSummaryBox.innerHTML = `
-              <strong>${typeLabel} ${escapeHtml(counterparty)}</strong><br>
-              Saldo restante: <strong>${formatCurrency(remaining)}</strong>
-            `;
-          }
-
-          if (settleForm) {
-            settleForm.dataset.submitting = "false";
-            const submitBtn = document.getElementById("btn-submit-settle");
-            if (submitBtn) {
-              submitBtn.disabled = false;
-              submitBtn.textContent = "Confirmar Pago";
-            }
-          }
-          showModalSafe(settleDialog);
-        });
-      });
 
     } catch (err) {
       if (recTbody) recTbody.innerHTML = '<tr><td colspan="7" class="text-center muted-row">Error al cargar cobros</td></tr>';
       if (payTbody) payTbody.innerHTML = '<tr><td colspan="7" class="text-center muted-row">Error al cargar deudas</td></tr>';
     }
+  }
+
+  // Centralized Event Delegation for Debt Actions (Edit, Pay Installment, Settle)
+  const debtsGrid = document.querySelector(".debts-grid");
+  if (debtsGrid) {
+    debtsGrid.addEventListener("click", (e) => {
+      // 1. Edit Debt Dialog
+      const editBtn = e.target.closest(".btn-edit-debt");
+      if (editBtn) {
+        const debtId = editBtn.getAttribute("data-id");
+        openDebtEditModal(debtId, editBtn.dataset);
+        return;
+      }
+
+      // 2. Installment Payment Dialog
+      const payInstBtn = e.target.closest(".btn-pay-installment");
+      if (payInstBtn) {
+        const debtId = payInstBtn.getAttribute("data-id");
+        openInstallmentModal(debtId, payInstBtn.dataset);
+        return;
+      }
+
+      // 3. Freeform Settlement Dialog
+      const settleBtn = e.target.closest(".btn-open-settle");
+      if (settleBtn) {
+        const debtId = settleBtn.getAttribute("data-id");
+        openSettleModal(debtId, settleBtn.dataset);
+        return;
+      }
+    });
+  }
+
+  function openDebtEditModal(debtId, data) {
+    if (!debtEditDialog || !debtEditForm) return;
+    debtEditForm.reset();
+    debtEditForm.dataset.submitting = "false";
+
+    document.getElementById("debt-edit-id").value = debtId;
+    document.getElementById("debt-edit-counterparty").value = data.counterparty || "";
+    document.getElementById("debt-edit-amount").value = data.amount || "";
+    document.getElementById("debt-edit-reason").value = data.reason || "";
+    document.getElementById("debt-edit-due-date").value = data.dueDate || "";
+    document.getElementById("debt-edit-status").value = data.status || "active";
+
+    const callout = document.getElementById("debt-edit-installment-callout");
+    if (callout) {
+      if (data.isInstallment === "true") {
+        callout.classList.remove("hidden");
+        callout.innerHTML = `
+          <strong>ℹ️ Préstamo a Cuotas:</strong> Al modificar el monto total de una deuda en cuotas,
+          el valor proporcional de las cuotas pendientes se recalculará automáticamente.
+        `;
+      } else {
+        callout.classList.add("hidden");
+      }
+    }
+
+    const submitBtn = document.getElementById("btn-submit-debt-edit");
+    if (submitBtn) {
+      submitBtn.disabled = false;
+      submitBtn.textContent = "Guardar Cambios";
+    }
+    showModalSafe(debtEditDialog);
+  }
+
+  function openInstallmentModal(debtId, data) {
+    if (!installmentPayDialog || !installmentPayForm) return;
+    installmentPayForm.reset();
+    installmentPayForm.dataset.submitting = "false";
+
+    document.getElementById("inst-debt-id").value = debtId;
+    const remInst = parseInt(data.remainingInstallments, 10) || 1;
+    const totalInst = parseInt(data.totalInstallments, 10) || 1;
+    const instAmt = parseFloat(data.installmentAmount) || 0;
+    const remAmt = parseFloat(data.remainingAmount) || 0;
+    const isReceivable = (data.type === "receivable");
+
+    document.getElementById("inst-amount-per-cuota").value = instAmt;
+    document.getElementById("inst-remaining-count").value = remInst;
+
+    // Populate cuotas select (1..remainingInstallments)
+    const cuotasSelect = document.getElementById("inst-cuotas-to-pay");
+    if (cuotasSelect) {
+      cuotasSelect.innerHTML = "";
+      for (let i = 1; i <= remInst; i++) {
+        const opt = document.createElement("option");
+        opt.value = i;
+        opt.textContent = `${i} ${i === 1 ? 'cuota' : 'cuotas'}`;
+        cuotasSelect.appendChild(opt);
+      }
+      cuotasSelect.value = "1";
+    }
+
+    // Summary Box
+    const summaryBox = document.getElementById("installment-summary-box");
+    if (summaryBox) {
+      const roleLabel = isReceivable ? "Cobro pendiente de:" : "Obligación pendiente con:";
+      const paidInst = Math.max(0, totalInst - remInst);
+      summaryBox.innerHTML = `
+        <strong>${roleLabel} ${escapeHtml(data.counterparty)}</strong><br>
+        Progreso: <strong>${paidInst}/${totalInst} cuotas canceladas</strong> (${remInst} restantes)<br>
+        Valor por cuota: <strong>${formatCurrency(instAmt)}</strong> | Saldo restante: <strong>${formatCurrency(remAmt)}</strong>
+      `;
+    }
+
+    // Dynamic Preview Calculation with exact cent handling on final cuota
+    const updatePreview = () => {
+      if (!cuotasSelect) return;
+      const count = parseInt(cuotasSelect.value, 10) || 1;
+      let totalToPay;
+      if (count === remInst) {
+        totalToPay = remAmt; // Exact remaining balance
+      } else {
+        totalToPay = Math.min(count * instAmt, remAmt);
+      }
+      const previewEl = document.getElementById("inst-calc-preview");
+      const hintEl = document.getElementById("inst-calc-hint");
+      if (previewEl) previewEl.textContent = formatCurrency(totalToPay);
+      if (hintEl) {
+        const remainingAfter = remInst - count;
+        hintEl.textContent = remainingAfter === 0
+          ? "🎉 ¡Esta operación liquidará el 100% de la deuda!"
+          : `Quedarán ${remainingAfter} ${remainingAfter === 1 ? 'cuota' : 'cuotas'} pendientes tras este pago.`;
+      }
+    };
+
+    if (cuotasSelect) {
+      cuotasSelect.onchange = updatePreview;
+      updatePreview();
+    }
+
+    const submitBtn = document.getElementById("btn-submit-installment");
+    if (submitBtn) {
+      submitBtn.disabled = false;
+      submitBtn.textContent = isReceivable ? "Confirmar Cobro de Cuota" : "Confirmar Pago de Cuotas";
+    }
+
+    showModalSafe(installmentPayDialog);
+  }
+
+  function openSettleModal(debtId, data) {
+    if (!settleDialog || !settleForm) return;
+    settleForm.reset();
+    settleForm.dataset.submitting = "false";
+
+    const settleIdInput = document.getElementById("settle-debt-id");
+    const settleAmtInput = document.getElementById("settle-amount");
+    if (settleIdInput) settleIdInput.value = debtId;
+    if (settleAmtInput) settleAmtInput.value = "";
+
+    if (settleSummaryBox) {
+      const typeLabel = data.type === "receivable" ? "Cobro a favor de:" : "Deuda por pagar a:";
+      settleSummaryBox.innerHTML = `
+        <strong>${typeLabel} ${escapeHtml(data.counterparty)}</strong><br>
+        Saldo restante: <strong>${formatCurrency(data.remaining)}</strong>
+      `;
+    }
+
+    const submitBtn = document.getElementById("btn-submit-settle");
+    if (submitBtn) {
+      submitBtn.disabled = false;
+      submitBtn.textContent = "Confirmar Pago";
+    }
+
+    showModalSafe(settleDialog);
   }
 
   async function loadSubscriptions() {
@@ -1090,19 +1507,29 @@ document.addEventListener("DOMContentLoaded", () => {
       const account = document.getElementById("debt-account").value;
       const reason = document.getElementById("debt-reason").value;
       const dueDate = document.getElementById("debt-due-date").value;
+      const isInstallment = debtIsInstallmentChk ? debtIsInstallmentChk.checked : false;
+      const totalInstallments = isInstallment ? (parseInt(document.getElementById("debt-total-installments").value, 10) || 6) : undefined;
+      const paymentFrequency = isInstallment ? document.getElementById("debt-payment-frequency").value : undefined;
 
       try {
+        const payload = {
+          debt_type: debtType,
+          counterparty: counterparty,
+          amount: parseFloat(amount),
+          account: account,
+          reason: reason,
+          due_date: dueDate || undefined,
+        };
+        if (isInstallment) {
+          payload.is_installment = true;
+          payload.total_installments = totalInstallments;
+          payload.payment_frequency = paymentFrequency;
+        }
+
         const res = await fetch("/api/finance/debts", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            debt_type: debtType,
-            counterparty: counterparty,
-            amount: parseFloat(amount),
-            account: account,
-            reason: reason,
-            due_date: dueDate || undefined,
-          }),
+          body: JSON.stringify(payload),
         });
 
         if (res.ok) {
@@ -1182,6 +1609,115 @@ document.addEventListener("DOMContentLoaded", () => {
     });
   }
 
+  // Handle Debt Edit Submission (PATCH /api/finance/debts/{id})
+  if (debtEditForm) {
+    debtEditForm.addEventListener("submit", async (e) => {
+      e.preventDefault();
+      if (debtEditForm.dataset.submitting === "true") return;
+      debtEditForm.dataset.submitting = "true";
+
+      const submitBtn = document.getElementById("btn-submit-debt-edit");
+      const originalText = submitBtn ? submitBtn.textContent : "Guardar Cambios";
+      if (submitBtn) {
+        submitBtn.disabled = true;
+        submitBtn.textContent = "Guardando...";
+      }
+
+      const debtId = document.getElementById("debt-edit-id").value;
+      const counterparty = document.getElementById("debt-edit-counterparty").value;
+      const amountVal = parseFloat(document.getElementById("debt-edit-amount").value);
+      const reason = document.getElementById("debt-edit-reason").value;
+      const dueDateVal = document.getElementById("debt-edit-due-date").value;
+      const statusVal = document.getElementById("debt-edit-status").value;
+
+      try {
+        const body = {
+          counterparty: counterparty,
+          amount: amountVal,
+          amount_cents: Math.round(amountVal * 100),
+          reason: reason,
+          due_date: dueDateVal || null,
+          status: statusVal,
+        };
+
+        const res = await fetch(`/api/finance/debts/${encodeURIComponent(debtId)}`, {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(body),
+        });
+
+        if (res.ok) {
+          showAlert("¡Registro de deuda actualizado exitosamente!");
+          closeModalSafe(debtEditDialog);
+          refreshDashboard();
+        } else {
+          const errData = await res.json().catch(() => ({}));
+          showAlert(`Error: ${errData.detail || "No se pudo actualizar la deuda"}`, "error");
+        }
+      } catch (err) {
+        showAlert("Error de red al actualizar la deuda", "error");
+      } finally {
+        debtEditForm.dataset.submitting = "false";
+        if (submitBtn) {
+          submitBtn.disabled = false;
+          submitBtn.textContent = originalText;
+        }
+      }
+    });
+  }
+
+  // Handle Installment Payment Submission (POST /api/finance/debts/{id}/installments/pay)
+  if (installmentPayForm) {
+    installmentPayForm.addEventListener("submit", async (e) => {
+      e.preventDefault();
+      if (installmentPayForm.dataset.submitting === "true") return;
+      installmentPayForm.dataset.submitting = "true";
+
+      const submitBtn = document.getElementById("btn-submit-installment");
+      const originalText = submitBtn ? submitBtn.textContent : "Confirmar Pago";
+      if (submitBtn) {
+        submitBtn.disabled = true;
+        submitBtn.textContent = "Procesando...";
+      }
+
+      const debtId = document.getElementById("inst-debt-id").value;
+      const cuotasToPay = parseInt(document.getElementById("inst-cuotas-to-pay").value, 10);
+      const accountVal = document.getElementById("inst-account").value;
+      const notesVal = document.getElementById("inst-notes").value;
+
+      try {
+        const body = {
+          installments_to_pay: cuotasToPay,
+          account: accountVal,
+          notes: notesVal || undefined,
+        };
+
+        const res = await fetch(`/api/finance/debts/${encodeURIComponent(debtId)}/installments/pay`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(body),
+        });
+
+        if (res.ok) {
+          showAlert(`¡Pago de ${cuotasToPay} cuota(s) registrado exitosamente!`);
+          closeModalSafe(installmentPayDialog);
+          refreshDashboard();
+        } else {
+          const errData = await res.json().catch(() => ({}));
+          showAlert(`Error: ${errData.detail || "Error al procesar pago de cuotas"}`, "error");
+        }
+      } catch (err) {
+        showAlert("Error de red al procesar el pago de cuotas", "error");
+      } finally {
+        installmentPayForm.dataset.submitting = "false";
+        if (submitBtn) {
+          submitBtn.disabled = false;
+          submitBtn.textContent = originalText;
+        }
+      }
+    });
+  }
+
   if (subForm) {
     subForm.addEventListener("submit", async (e) => {
       e.preventDefault();
@@ -1229,6 +1765,163 @@ document.addEventListener("DOMContentLoaded", () => {
         showAlert("Error de red al guardar suscripción", "error");
       } finally {
         subForm.dataset.submitting = "false";
+        if (submitBtn) {
+          submitBtn.disabled = false;
+          submitBtn.textContent = originalText;
+        }
+      }
+    });
+  }
+
+  // ================= M11: Direct Account Balance Operations Logic =================
+
+  // Real-time COP amount formatting with thousand separators (.)
+  if (accountOpAmountInput) {
+    accountOpAmountInput.addEventListener("input", () => {
+      const rawDigits = accountOpAmountInput.value.replace(/\D/g, "");
+      if (!rawDigits) {
+        accountOpAmountInput.value = "";
+        if (accountOpAmountRaw) accountOpAmountRaw.value = "";
+        return;
+      }
+      const num = parseInt(rawDigits, 10);
+      if (isNaN(num) || num <= 0) {
+        accountOpAmountInput.value = "";
+        if (accountOpAmountRaw) accountOpAmountRaw.value = "";
+        return;
+      }
+      const formatted = rawDigits.replace(/\B(?=(\d{3})+(?!\d))/g, ".");
+      accountOpAmountInput.value = formatted;
+      if (accountOpAmountRaw) accountOpAmountRaw.value = num.toString();
+    });
+  }
+
+  function updateAccountOpModalUI(action, accountName) {
+    const isDeposit = action === "deposit";
+    if (accountOpDialogTitle) {
+      accountOpDialogTitle.textContent = isDeposit
+        ? `➕ Depositar en ${accountName || "Cuenta"}`
+        : `➖ Retirar de ${accountName || "Cuenta"}`;
+    }
+    if (accountOpSubmitBtn) {
+      accountOpSubmitBtn.textContent = isDeposit ? "Confirmar Depósito" : "Confirmar Retiro";
+    }
+    if (accountOpConcept) {
+      accountOpConcept.placeholder = isDeposit
+        ? "ej. Salario quincenal, Transferencia recibida, Recarga"
+        : "ej. Retiro en cajero, Pago en efectivo, Gastos varios";
+    }
+  }
+
+  if (accountOpTypeSelect) {
+    accountOpTypeSelect.addEventListener("change", () => {
+      const currentAcc = accountOpAccountName ? accountOpAccountName.value : "";
+      updateAccountOpModalUI(accountOpTypeSelect.value, currentAcc);
+    });
+  }
+
+  function openAccountOpModal(accountId, accountName, balance, action = "deposit") {
+    if (!accountOpDialog) return;
+    if (accountOpForm) {
+      accountOpForm.reset();
+      accountOpForm.dataset.submitting = "false";
+    }
+    if (accountOpAccountId) accountOpAccountId.value = accountId;
+    if (accountOpAccountName) accountOpAccountName.value = accountName;
+    if (accountOpTargetName) accountOpTargetName.textContent = accountName;
+    if (accountOpCurrentBalance) accountOpCurrentBalance.textContent = formatCurrency(balance);
+    if (accountOpTypeSelect) accountOpTypeSelect.value = action;
+    if (accountOpAmountRaw) accountOpAmountRaw.value = "";
+    if (accountOpAmountInput) accountOpAmountInput.value = "";
+    if (accountOpNotes) accountOpNotes.value = "";
+
+    updateAccountOpModalUI(action, accountName);
+
+    if (accountOpSubmitBtn) {
+      accountOpSubmitBtn.disabled = false;
+    }
+
+    showModalSafe(accountOpDialog);
+    if (accountOpAmountInput) {
+      setTimeout(() => accountOpAmountInput.focus(), 100);
+    }
+  }
+
+  // Event delegation on accounts-grid for all card action buttons
+  const accountsGrid = document.getElementById("accounts-grid");
+  if (accountsGrid) {
+    accountsGrid.addEventListener("click", (e) => {
+      const btn = e.target.closest(".btn-account-op");
+      if (!btn) return;
+      const id = btn.getAttribute("data-id");
+      const name = btn.getAttribute("data-name");
+      const balance = parseFloat(btn.getAttribute("data-balance") || "0");
+      const action = btn.getAttribute("data-action") || "deposit";
+      openAccountOpModal(id, name, balance, action);
+    });
+  }
+
+  if (accountOpForm) {
+    accountOpForm.addEventListener("submit", async (e) => {
+      e.preventDefault();
+      if (accountOpForm.dataset.submitting === "true") return;
+      accountOpForm.dataset.submitting = "true";
+
+      const submitBtn = document.getElementById("btn-submit-account-op");
+      const originalText = submitBtn ? submitBtn.textContent : "Confirmar Operación";
+      if (submitBtn) {
+        submitBtn.disabled = true;
+        submitBtn.textContent = "Procesando...";
+      }
+
+      const accountId = (accountOpAccountId ? accountOpAccountId.value : "").trim();
+      const accountName = (accountOpAccountName ? accountOpAccountName.value : "").trim();
+      const operation = accountOpTypeSelect ? accountOpTypeSelect.value : "deposit";
+      const rawDigits = (accountOpAmountInput ? accountOpAmountInput.value : "").replace(/\D/g, "");
+      const amount = parseInt(rawDigits, 10);
+      const concept = (accountOpConcept ? accountOpConcept.value : "").trim();
+      const notes = (accountOpNotes ? accountOpNotes.value : "").trim();
+
+      if (isNaN(amount) || amount <= 0) {
+        showAlert("Por favor ingresa un monto válido mayor a 0 COP.", "error");
+        accountOpForm.dataset.submitting = "false";
+        if (submitBtn) {
+          submitBtn.disabled = false;
+          submitBtn.textContent = originalText;
+        }
+        return;
+      }
+
+      try {
+        const payload = {
+          action: operation,
+          operation: operation,
+          amount: amount,
+          amount_cents: Math.round(amount * 100),
+          concept: concept || (operation === "deposit" ? "Depósito" : "Retiro"),
+          notes: notes || undefined,
+        };
+
+        const res = await fetch(`/api/finance/accounts/${encodeURIComponent(accountId)}/operations`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(payload),
+        });
+
+        if (res.ok) {
+          const opLabel = operation === "deposit" ? "Depósito" : "Retiro";
+          showAlert(`¡${opLabel} de ${formatCurrency(amount)} en ${accountName} realizado exitosamente!`);
+          closeModalSafe(accountOpDialog);
+          refreshDashboard();
+        } else {
+          const errData = await res.json().catch(() => ({}));
+          showAlert(`Error: ${errData.detail || "Error al procesar la operación de cuenta"}`, "error");
+        }
+      } catch (err) {
+        console.error("Network error during account operation:", err);
+        showAlert("Error de red al procesar la operación de cuenta.", "error");
+      } finally {
+        accountOpForm.dataset.submitting = "false";
         if (submitBtn) {
           submitBtn.disabled = false;
           submitBtn.textContent = originalText;
