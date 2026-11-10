@@ -531,58 +531,26 @@ class MockWebSearchClient(SearchServiceProtocol):
     """Deterministic leisure and outing recommendation mock."""
 
     def __init__(self) -> None:
-        self.places_db = [
-            {
-                "name": "Trattoria Stella",
-                "category": "Italian",
-                "rating": 4.8,
-                "price_level": "$$",
-                "address": "401 Pine St, Downtown",
-                "summary": "Authentic handmade pasta and cozy romantic ambiance in Downtown.",
-                "tags": ["italian", "pasta", "downtown", "romantic"],
-            },
-            {
-                "name": "Sushi Kashiba",
-                "category": "Japanese",
-                "rating": 4.9,
-                "price_level": "$$$$",
-                "address": "86 Pike St, Downtown",
-                "summary": "Legendary omakase dining with premium seafood in Downtown.",
-                "tags": ["sushi", "japanese", "downtown", "omakase"],
-            },
-            {
-                "name": "Bistro Pierre",
-                "category": "French",
-                "rating": 4.7,
-                "price_level": "$$",
-                "address": "1200 5th Ave, Midtown",
-                "summary": "Classic Parisian fare, steak frites, and extensive wine list in Midtown.",
-                "tags": ["french", "bistro", "midtown", "wine"],
-            },
-            {
-                "name": "Monorail Espresso",
-                "category": "Coffee",
-                "rating": 4.8,
-                "price_level": "$",
-                "address": "510 Pike St, Downtown",
-                "summary": "Historic espresso bar with artisanal coffee and free fast wifi.",
-                "tags": ["coffee", "wifi", "espresso", "downtown"],
-            },
-        ]
+        from app.integrations.mocks import MockWebSearchClient as AppMockClient
+        from app.services.search_service import SearchService
+
+        self._app_mock = AppMockClient()
+        self._search_service = SearchService(search_client=self._app_mock)
+        self.places_db = self._app_mock._places
+
+    def search(self, *args: Any, **kwargs: Any) -> List[Dict[str, Any]]:
+        return self._app_mock.search(*args, **kwargs)
 
     def search_outings(
-        self, user_id: str, query: str, location: Optional[str] = None
+        self,
+        user_id: str,
+        query: str,
+        location: Optional[str] = None,
+        coordinates: Optional[Any] = None,
     ) -> List[Dict[str, Any]]:
-        clean_q = query.lower()
-        results = []
-        for p in self.places_db:
-            matches_q = any(t in clean_q for t in p["tags"]) or clean_q in p["name"].lower() or p["category"].lower() in clean_q
-            matches_loc = True
-            if location:
-                matches_loc = location.lower() in p["address"].lower() or location.lower() in p["tags"]
-            if matches_q and matches_loc:
-                results.append(p)
-        return results if results else []
+        return self._search_service.search_outings(
+            user_id=user_id, query=query, location=location, coordinates=coordinates
+        )
 
 
 # ============================================================================

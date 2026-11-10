@@ -1755,7 +1755,9 @@ class IntentParser(IntentParserProtocol):
             "lugares para almorzar", "sitios para cenar", "sitios para almorzar", "dónde cenar", "donde cenar",
             "dónde comer", "donde comer", "dónde almorzar", "donde almorzar", "cenar en", "comer en",
             "almorzar en", "buscar restaurantes", "sitios en", "lugares en", "dónde salir", "donde salir",
-            "cenar", "almorzar"
+            "cenar", "almorzar", "bares en", "bares", "bar en", "bar",
+            "tomar algo", "tomar una cerveza", "ir a tomar", "tragos en",
+            "cócteles en", "cocteles en", "cafés en", "cafes en", "café en", "cafe en",
         ]
         if not any(t in lower for t in triggers):
             return None

@@ -460,6 +460,24 @@ class MockWebSearchClient:
         catalog = [
             # Baseline US Dining: Italian
             {
+                "name": "Trattoria Stella",
+                "category": "Italian",
+                "cuisine": "Italian",
+                "rating": 4.8,
+                "price_tier": "$$",
+                "price_level": "$$",
+                "address": "401 Pine St, Downtown",
+                "location": "Downtown",
+                "sector": "Downtown",
+                "latitude": 47.6105,
+                "longitude": -122.3395,
+                "summary": "Authentic handmade pasta and cozy romantic ambiance in Downtown.",
+                "description": "Authentic handmade pasta and cozy romantic ambiance in Downtown.",
+                "amenities": ["italian", "pasta", "downtown", "romantic", "outdoor seating"],
+                "tags": ["italian", "pasta", "downtown", "romantic"],
+                "opening_hours": "5:00 PM - 10:00 PM",
+            },
+            {
                 "name": "Luigi's Trattoria",
                 "category": "Italian",
                 "cuisine": "Italian",
@@ -550,6 +568,25 @@ class MockWebSearchClient:
                 "description": "Street-style birria tacos, house-made horchata, and vibrant roasted salsa bar.",
                 "amenities": ["casual", "fast casual", "spicy options"],
                 "opening_hours": "10:30 AM - 10:00 PM",
+            },
+            # Dining: French / Midtown
+            {
+                "name": "Bistro Pierre",
+                "category": "French",
+                "cuisine": "French",
+                "rating": 4.7,
+                "price_tier": "$$",
+                "price_level": "$$",
+                "address": "1200 5th Ave, Midtown",
+                "location": "Midtown",
+                "sector": "Midtown",
+                "latitude": 47.6085,
+                "longitude": -122.3335,
+                "summary": "Classic Parisian fare, steak frites, and extensive wine list in Midtown.",
+                "description": "Classic Parisian fare, steak frites, and extensive wine list in Midtown.",
+                "amenities": ["french", "bistro", "midtown", "wine", "outdoor seating"],
+                "tags": ["french", "bistro", "midtown", "wine"],
+                "opening_hours": "11:30 AM - 10:00 PM",
             },
             # Dining: Coffee / Cafe
             {
@@ -824,24 +861,6 @@ class MockWebSearchClient:
                 if matches_loc:
                     results.append(place)
                 elif not clean_loc and (matches_q or matches_cat):
-                    results.append(place)
-
-        # If location was specified but no direct location matches, fall back to query term matches
-        if location and not results and not coordinates:
-            for place in self._places:
-                text_corpus = (
-                    f"{place['name']} {place['category']} {place['cuisine']} {place['location']} "
-                    f"{place.get('sector', '')} {place['address']} {place['description']} "
-                    f"{' '.join(place.get('amenities', []))}"
-                ).lower()
-                text_norm = _normalize_text(text_corpus)
-                matches_q = any(
-                    len(_normalize_text(w)) > 2
-                    and _normalize_text(w) not in {"near", "en", "el", "la", "de", "para", "por", "the"}
-                    and _normalize_text(w) in text_norm
-                    for w in q_lower.split()
-                )
-                if matches_q:
                     results.append(place)
 
         # If a specific location or coordinates was requested and yielded nothing, return []

@@ -45,7 +45,8 @@ COMMON_ENGLISH_4WORDS = {
     "word", "user", "pass", "note", "task", "load", "true", "name", "from", "with",
     "that", "this", "have", "will", "your", "more", "make", "each", "read", "sent",
     "view", "open", "call", "send", "done", "drop", "list", "wait", "step", "turn",
-    "debt", "must", "fail", "rate",
+    "debt", "must", "fail", "rate", "cent", "loss", "data", "upon",
+    "were", "been", "when", "what", "some", "into", "also", "only",
 }
 
 

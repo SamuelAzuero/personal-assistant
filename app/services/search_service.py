@@ -117,6 +117,7 @@ CANONICAL_SECTORS = {
 
 LOCATION_KEYWORDS = [
     "downtown",
+    "midtown",
     "seattle",
     "brooklyn",
     "capitol hill",
